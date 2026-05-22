@@ -95,9 +95,7 @@ async def main() -> None:
         else:
             pipeline = ocr_pipeline
         print(f"Processing: {doc_path}")
-        total_chunks += await pipeline.run(
-            documents=[doc_path], use_checkpoint=False
-        )
+        total_chunks += await pipeline.run(documents=[doc_path], use_checkpoint=False)
 
     print(
         f"Successfully indexed {total_chunks} chunks from "
