@@ -4,7 +4,27 @@ Copier template for bootstrapping [Mistral Search Toolkit](https://pypi.org/proj
 
 Built on the SDK in [mistralai/search/toolkit](https://github.com/mistralai/mistral-pro/tree/main/dashboards/main/search/toolkit) — ingestion pipelines, Vespa indexing, and hybrid retrieval.
 
+## Prerequisites
+
+This repo is a **[Copier](https://copier.readthedocs.io/)** template — a Python CLI that scaffolds a new project from `template/` (not the French verb *copier*).
+
+Install Copier once (pick one):
+
+```bash
+uv tool install copier
+```
+
+Or run it without a global install via [uv](https://docs.astral.sh/uv/):
+
+```bash
+uvx copier copy ./search-starter-app my-search-project
+```
+
+You also need [Docker](https://docs.docker.com/get-docker/) for local Vespa and [uv](https://docs.astral.sh/uv/) in the generated project.
+
 ## Usage
+
+From this monorepo:
 
 ```bash
 copier copy ./search-starter-app my-search-project
