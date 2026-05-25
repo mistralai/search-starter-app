@@ -17,7 +17,7 @@ uv tool install copier
 Or run it without a global install via [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uvx copier copy ./search-starter-app my-search-project
+uvx copier copy ./search-starter-app my-search-project --trust
 ```
 
 You also need [Docker](https://docs.docker.com/get-docker/) for local Vespa and [uv](https://docs.astral.sh/uv/) in the generated project.
@@ -27,7 +27,7 @@ You also need [Docker](https://docs.docker.com/get-docker/) for local Vespa and 
 From this monorepo:
 
 ```bash
-copier copy ./search-starter-app my-search-project
+copier copy ./search-starter-app my-search-project --trust
 ```
 
 Or from GitHub (when published):
