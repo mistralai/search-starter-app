@@ -5,7 +5,7 @@ include .env
 export
 endif
 
-VESPA_CONTAINER := {{ project_name }}-vespa
+VESPA_CONTAINER := {{ _copier_conf.dst_path.name }}-vespa
 VESPA_QUERY_PORT := $(or $(VESPA_QUERY_PORT),18080)
 VESPA_CONFIG_PORT := $(or $(VESPA_CONFIG_PORT),19072)
 VESPA_ENDPOINT := $(or $(VESPA_ENDPOINT),http://localhost:$(VESPA_QUERY_PORT))

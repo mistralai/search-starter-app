@@ -7,11 +7,6 @@ _tasks:
       - "{{ _copier_conf.src_path }}/scripts/populate_api_key.py"
     when: "{{ _copier_operation == 'copy' }}"
 
-project_name:
-  type: str
-  default: "my-search"
-  help: "Project name"
-
 mistral_api_key:
   type: str
   secret: true
