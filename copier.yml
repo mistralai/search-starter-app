@@ -16,13 +16,3 @@ collection_name:
   type: str
   default: "exampledocs"
   help: "Vespa collection name (must match the schema migration)"
-
-vespa_query_port:
-  type: int
-  default: 18080
-  help: "Host port for Vespa query API (maps to container :8080 in docker-compose.yaml)"
-
-vespa_config_port:
-  type: int
-  default: 19072
-  help: "Host port for Vespa config server (maps to container :19071 in docker-compose.yaml)"

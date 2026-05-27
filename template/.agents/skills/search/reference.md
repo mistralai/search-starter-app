@@ -127,7 +127,7 @@ Optional overrides (rare; full URL wins over port):
 | `VESPA_ENDPOINT` | Query/document URL for `VespaClientConfig` and `make bruno` (else `vespa_app.vespa_endpoint()` builds from `VESPA_QUERY_PORT`) |
 | `VESPA_CONFIG_URL` | Config server URL for `make verify-vespa` / `migrate-vespa` (else `http://localhost:{VESPA_CONFIG_PORT}` in Makefile) |
 
-Copier answers: `vespa_query_port`, `vespa_config_port` (no separate endpoint URL variables).
+Port defaults are hardcoded (`18080` / `19072`) but can be overridden via `VESPA_QUERY_PORT` / `VESPA_CONFIG_PORT` in `.env` or by editing `docker-compose.yaml`.
 
 ```python
 from vespa_app import app, vespa_endpoint

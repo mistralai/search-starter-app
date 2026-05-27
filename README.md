@@ -67,7 +67,5 @@ make bruno   # optional: API files under vespa/bruno/vespa/
 | `project_name`     | Name of the project (pyproject.toml, container)  |
 | `mistral_api_key`  | Mistral API key (written to `.env`, git-ignored) |
 | `collection_name`  | Vespa collection / schema name                   |
-| `vespa_query_port` | Host port for query API (default `18080`, maps to container `:8080`) |
-| `vespa_config_port`| Host port for config server (default `19072`, maps to `:19071`) |
 
 Generated `.env` also sets `WORKSPACE_ROOT=.` so Bruno files are written inside the project.

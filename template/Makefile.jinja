@@ -1,8 +1,8 @@
 .PHONY: installdeps setup-vespa start-vespa stop-vespa reset-vespa migrate-vespa verify-vespa ingest search bruno generate-vespa-lock
 
 VESPA_CONTAINER := {{ project_name }}-vespa
-VESPA_QUERY_PORT := $(or $(VESPA_QUERY_PORT),{{ vespa_query_port }})
-VESPA_CONFIG_PORT := $(or $(VESPA_CONFIG_PORT),{{ vespa_config_port }})
+VESPA_QUERY_PORT := $(or $(VESPA_QUERY_PORT),18080)
+VESPA_CONFIG_PORT := $(or $(VESPA_CONFIG_PORT),19072)
 VESPA_ENDPOINT := $(or $(VESPA_ENDPOINT),http://localhost:$(VESPA_QUERY_PORT))
 VESPA_CONFIG_URL := $(or $(VESPA_CONFIG_URL),http://localhost:$(VESPA_CONFIG_PORT))
 

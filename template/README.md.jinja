@@ -22,7 +22,7 @@ make setup-vespa
 
 Expected output (success): Vespa container `Healthy`, migration `"activated": true`, then `Application is up!` / `Application ready`. Warnings about `no_query_match` and `summary_fields` are normal. First startup may take up to a minute.
 
-If ports **{{ vespa_query_port }}** / **{{ vespa_config_port }}** are already in use, regenerate with different `vespa_query_port` / `vespa_config_port`, or set `VESPA_QUERY_PORT` / `VESPA_CONFIG_PORT` in `.env` and align `docker-compose.yaml` host mappings.
+If ports **18080** / **19072** are already in use, set `VESPA_QUERY_PORT` / `VESPA_CONFIG_PORT` in `.env` and align `docker-compose.yaml` host mappings.
 
 To wipe local Vespa data and redeploy from scratch:
 
