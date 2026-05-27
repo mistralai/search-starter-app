@@ -106,7 +106,7 @@ Returns chunk count (int). Pass `context=IngestContext()` for custom ingest scop
 
 | Variable | Default | Role |
 |----------|---------|------|
-| `MISTRAL_API_KEY` | (empty) | API key; set manually in `.env` after `copier copy` |
+| `MISTRAL_API_KEY` | from shell or empty | Auto-filled in `.env` when exported before `copier copy` |
 | `MISTRAL_API_URL` | `https://api.mistral.ai` | Optional custom API base URL |
 
 ### Vespa (search-starter-app `.env`)

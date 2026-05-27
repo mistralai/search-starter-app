@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Convenience wrapper around `copier copy` (similar to workflows' setup CLI).
+set -euo pipefail
+
+TEMPLATE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEST="${1:?Usage: $0 <destination>}"
+shift || true
+
+ARGS=(copy "${TEMPLATE_DIR}" --trust "${DEST}")
+if [[ -n "${MISTRAL_API_KEY:-}" ]]; then
+  ARGS+=(--data "mistral_api_key=${MISTRAL_API_KEY}")
+fi
+
+exec copier "${ARGS[@]}" "$@"

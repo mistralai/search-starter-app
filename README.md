@@ -34,9 +34,16 @@ From a local git checkout:
 copier copy ./search-starter-app my-search-project
 ```
 
-Copier uses the **latest git tag** of the template (not uncommitted files). After changing the template, commit and tag a new release (e.g. `v1.0.1`) so `copier copy ./search-starter-app` picks up the changes.
+Or use the setup wrapper (passes `MISTRAL_API_KEY` when exported):
 
-Initial setup only asks for **project name** and **collection name**. Ports default to `18080` / `19072` in `.env`; set `MISTRAL_API_KEY` in `.env` after copy (not prompted).
+```bash
+export MISTRAL_API_KEY=your-key   # optional
+./search-starter-app/scripts/setup my-search-project
+```
+
+Copier uses the **latest git tag** of the template (not uncommitted files). After changing the template, commit and tag a new release (e.g. `v1.0.2`) so `copier copy ./search-starter-app` picks up the changes.
+
+Initial setup only asks for **project name** and **collection name** (no port questions). Ports default to `18080` / `19072` in `.env`. If `MISTRAL_API_KEY` is exported in your shell, a post-copy task writes it into `.env` automatically (not prompted).
 
 ## Template Structure
 
@@ -79,4 +86,4 @@ Port selection is intentionally not part of the initial Copier questions. Genera
 | `project_name`     | Name of the project (pyproject.toml, container)  |
 | `collection_name`  | Vespa collection / schema name                   |
 
-Generated `.env` sets default Vespa ports and `WORKSPACE_ROOT=.`; add `MISTRAL_API_KEY` manually before ingest/search.
+Generated `.env` sets default Vespa ports and `WORKSPACE_ROOT=.`; `MISTRAL_API_KEY` is filled from your shell when set, otherwise add it manually before ingest/search.
