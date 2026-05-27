@@ -1,6 +1,11 @@
 .PHONY: installdeps setup-vespa start-vespa stop-vespa reset-vespa migrate-vespa verify-vespa ingest search bruno generate-vespa-lock
 
-VESPA_CONTAINER := {{ project_name }}-vespa
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
+
+VESPA_CONTAINER := {{ _copier_conf.dst_path.name }}-vespa
 VESPA_QUERY_PORT := $(or $(VESPA_QUERY_PORT),18080)
 VESPA_CONFIG_PORT := $(or $(VESPA_CONFIG_PORT),19072)
 VESPA_ENDPOINT := $(or $(VESPA_ENDPOINT),http://localhost:$(VESPA_QUERY_PORT))
@@ -27,12 +32,10 @@ verify-vespa:
 stop-vespa:
 	docker compose stop vespa
 
-## Stop Vespa and remove the data volume (wipes indexed documents; run `make setup-vespa` to start fresh)
+## Stop Vespa and remove this project's data volume (wipes indexed documents; run `make setup-vespa` to start fresh)
 reset-vespa:
-	docker compose stop vespa
-	docker compose rm -f vespa
-	-docker volume rm $$(docker volume ls -qf 'name=vespa-data')
-	@echo "Vespa container and data volume removed. Run: make setup-vespa"
+	docker compose down -v --remove-orphans
+	@echo "Vespa stopped and project volume removed. Run: make setup-vespa"
 
 migrate-vespa: verify-vespa
 	uv run mistral-vespa migrate --app-dir src/vespa_app \

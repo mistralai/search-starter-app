@@ -1,4 +1,4 @@
-# {{ project_name }}
+# {{ _copier_conf.dst_path.name }}
 
 A [Mistral Search Toolkit](https://pypi.org/project/mistralai-search-toolkit/) project with a Vespa backend.
 
@@ -10,7 +10,7 @@ SDK namespace: `mistralai.search.toolkit` — see the [toolkit docs](https://git
 make installdeps
 ```
 
-Set `MISTRAL_API_KEY` in `.env` (created by copier). Vespa endpoints and `COLLECTION_NAME` are pre-configured.
+Set `MISTRAL_API_KEY` in `.env` if needed (auto-filled from your shell when exported; not prompted during `copier copy`). Project name matches the folder you chose when running `copier copy` (this directory).
 
 ## Commands
 
@@ -22,7 +22,7 @@ make setup-vespa
 
 Expected output (success): Vespa container `Healthy`, migration `"activated": true`, then `Application is up!` / `Application ready`. Warnings about `no_query_match` and `summary_fields` are normal. First startup may take up to a minute.
 
-If ports **18080** / **19072** are already in use, set `VESPA_QUERY_PORT` / `VESPA_CONFIG_PORT` in `.env` and align `docker-compose.yaml` host mappings.
+You are not asked for ports during `copier copy`; defaults are set for you. If ports **18080** / **19072** are already in use, update `VESPA_QUERY_PORT` / `VESPA_CONFIG_PORT` in `.env` and rerun `make setup-vespa`.
 
 To wipe local Vespa data and redeploy from scratch:
 
