@@ -28,6 +28,16 @@ You also need [Docker](https://docs.docker.com/get-docker/) for local Vespa and 
 copier copy gh:mistralai/search-starter-app my-search-project
 ```
 
+From a local git checkout:
+
+```bash
+copier copy ./search-starter-app my-search-project
+```
+
+Copier uses the **latest git tag** of the template (not uncommitted files). After changing the template, commit and tag a new release (e.g. `v1.0.1`) so `copier copy ./search-starter-app` picks up the changes.
+
+Initial setup only asks for **project name** and **collection name**. Ports default to `18080` / `19072` in `.env`; set `MISTRAL_API_KEY` in `.env` after copy (not prompted).
+
 ## Template Structure
 
 ```
@@ -60,12 +70,13 @@ make search query="hello world"
 make bruno   # optional: API files under vespa/bruno/vespa/
 ```
 
+Port selection is intentionally not part of the initial Copier questions. Generated projects default to `18080` / `19072`; if needed later, users can edit `.env` (`VESPA_QUERY_PORT`, `VESPA_CONFIG_PORT`) without re-generating the project.
+
 ## Variables
 
 | Variable           | Description                                      |
 | ------------------ | ------------------------------------------------ |
 | `project_name`     | Name of the project (pyproject.toml, container)  |
-| `mistral_api_key`  | Mistral API key (written to `.env`, git-ignored) |
 | `collection_name`  | Vespa collection / schema name                   |
 
-Generated `.env` also sets `WORKSPACE_ROOT=.` so Bruno files are written inside the project.
+Generated `.env` sets default Vespa ports and `WORKSPACE_ROOT=.`; add `MISTRAL_API_KEY` manually before ingest/search.

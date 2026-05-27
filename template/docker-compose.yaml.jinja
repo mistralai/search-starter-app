@@ -1,6 +1,6 @@
 # Local Vespa for development.
-# Query API: http://localhost:18080  (host 18080 → container :8080)
-# Config server: http://localhost:19072  (host 19072 → container :19071)
+# Query API: http://localhost:${VESPA_QUERY_PORT:-18080}  (.env VESPA_QUERY_PORT)
+# Config server: http://localhost:${VESPA_CONFIG_PORT:-19072}  (.env VESPA_CONFIG_PORT)
 
 services:
   vespa:
@@ -8,8 +8,8 @@ services:
     container_name: {{ project_name }}-vespa
     hostname: {{ project_name }}-vespa
     ports:
-      - "18080:8080"
-      - "19072:19071"
+      - "${VESPA_QUERY_PORT:-18080}:8080"
+      - "${VESPA_CONFIG_PORT:-19072}:19071"
     volumes:
       - vespa-data:/opt/vespa/var
     environment:

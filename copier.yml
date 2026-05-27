@@ -6,12 +6,6 @@ project_name:
   default: "my-search"
   help: "Project name"
 
-mistral_api_key:
-  type: str
-  secret: true
-  default: "{{ environ.get('MISTRAL_API_KEY', '') }}"
-  help: "Mistral API key"
-
 collection_name:
   type: str
   default: "exampledocs"
