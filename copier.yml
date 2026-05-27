@@ -9,7 +9,7 @@ project_name:
 mistral_api_key:
   type: str
   secret: true
-  default: "{{ os.environ.get('MISTRAL_API_KEY', '') }}"
+  default: "{{ environ.get('MISTRAL_API_KEY', '') }}"
   help: "Mistral API key"
 
 collection_name:
