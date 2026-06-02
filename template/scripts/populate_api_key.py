@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write MISTRAL_API_KEY from the shell into the generated project's .env."""
+"""Write MISTRAL_API_KEY from the shell into .env (run via `make installdeps`)."""
 
 from __future__ import annotations
 

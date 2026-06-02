@@ -5,7 +5,7 @@ GENERATED_PROJECT := /tmp/search-starter-app-integration-test
 ## Generate a project from the template and run integration tests
 integration-test:
 	rm -rf $(GENERATED_PROJECT)
-	copier copy --defaults --UNSAFE --vcs-ref=HEAD . $(GENERATED_PROJECT)
+	copier copy --defaults --vcs-ref=HEAD . $(GENERATED_PROJECT)
 	$(MAKE) _test-uv-lock-generated
 	$(MAKE) _test-vespa-app-import
 	$(MAKE) _test-ingest-help
