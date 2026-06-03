@@ -42,7 +42,7 @@ Optional wrapper (same as `copier copy`, no extra flags):
 
 Copier uses the **latest git tag** of the template (not uncommitted files). After changing the template, commit and tag a new release so `copier copy ./search-starter-app` picks up the changes.
 
-Initial setup only asks for **collection name**. The **destination folder** is the project name (`pyproject.toml`, README, Vespa container). Ports default to `18080` / `19072` in `.env`. To copy `MISTRAL_API_KEY` from your shell into `.env`, run `make installdeps` in the generated project.
+Initial setup asks for **Mistral API key** and **collection name**. The **destination folder** is the project name (`pyproject.toml`, README, Vespa container). Ports default to `18080` / `19072` in `.env`.
 
 ## Template Structure
 
@@ -83,6 +83,7 @@ Port selection is intentionally not part of the initial Copier questions. Genera
 | Variable           | Description                                      |
 | ------------------ | ------------------------------------------------ |
 | (destination path) | Project name = folder you pass to `copier copy`  |
+| `mistral_api_key`  | Mistral API key (written to `.env`, git-ignored)   |
 | `collection_name`  | Vespa collection / schema name                   |
 
-Generated `.env` sets default Vespa ports and `WORKSPACE_ROOT=.`; run `make installdeps` with `MISTRAL_API_KEY` exported to fill the key, or edit `.env` manually before ingest/search.
+Generated `.env` also sets default Vespa ports and `WORKSPACE_ROOT=.`.

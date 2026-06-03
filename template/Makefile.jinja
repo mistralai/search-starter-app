@@ -11,10 +11,9 @@ VESPA_CONFIG_PORT := $(or $(VESPA_CONFIG_PORT),19072)
 VESPA_ENDPOINT := $(or $(VESPA_ENDPOINT),http://localhost:$(VESPA_QUERY_PORT))
 VESPA_CONFIG_URL := $(or $(VESPA_CONFIG_URL),http://localhost:$(VESPA_CONFIG_PORT))
 
-## Install dependencies (optional: export MISTRAL_API_KEY first to copy it into .env)
+## Install dependencies
 installdeps:
 	uv sync
-	@uv run python scripts/populate_api_key.py
 
 ## Start Vespa and apply schema migrations
 setup-vespa: start-vespa migrate-vespa
