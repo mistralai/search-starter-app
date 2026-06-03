@@ -1,17 +1,11 @@
 _min_copier_version: "9.0.0"
 _subdirectory: "template"
 
-_tasks:
-  - command:
-      - "{{ _copier_python }}"
-      - "{{ _copier_conf.src_path }}/scripts/populate_api_key.py"
-    when: "{{ _copier_operation == 'copy' }}"
-
 mistral_api_key:
   type: str
   secret: true
   default: ""
-  when: false
+  help: "Mistral API key (written to .env, git-ignored)"
 
 collection_name:
   type: str

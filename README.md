@@ -34,16 +34,15 @@ From a local git checkout:
 copier copy ./search-starter-app my-search-project
 ```
 
-Or use the setup wrapper (passes `MISTRAL_API_KEY` when exported):
+Optional wrapper (same as `copier copy`, no extra flags):
 
 ```bash
-export MISTRAL_API_KEY=your-key   # optional
 ./search-starter-app/scripts/setup my-search-project
 ```
 
-Copier uses the **latest git tag** of the template (not uncommitted files). After changing the template, commit and tag a new release (e.g. `v1.0.2`) so `copier copy ./search-starter-app` picks up the changes.
+Copier uses the **latest git tag** of the template (not uncommitted files). After changing the template, commit and tag a new release so `copier copy ./search-starter-app` picks up the changes.
 
-Initial setup asks for **collection name**. The **destination folder** you pass on the command line is the project name (used in `pyproject.toml`, README title, Vespa container name, etc.) — e.g. `copier copy ./search-starter-app ./my-rag-app` creates `my-rag-app/` with `name = "my-rag-app"`. Ports default to `18080` / `19072` in `.env`. If `MISTRAL_API_KEY` is exported in your shell, a post-copy task writes it into `.env` automatically.
+Initial setup asks for **Mistral API key** and **collection name**. The **destination folder** is the project name (`pyproject.toml`, README, Vespa container). Ports default to `18080` / `19072` in `.env`.
 
 ## Template Structure
 
@@ -84,6 +83,7 @@ Port selection is intentionally not part of the initial Copier questions. Genera
 | Variable           | Description                                      |
 | ------------------ | ------------------------------------------------ |
 | (destination path) | Project name = folder you pass to `copier copy`  |
+| `mistral_api_key`  | Mistral API key (written to `.env`, git-ignored)   |
 | `collection_name`  | Vespa collection / schema name                   |
 
-Generated `.env` sets default Vespa ports and `WORKSPACE_ROOT=.`; `MISTRAL_API_KEY` is filled from your shell when set, otherwise add it manually before ingest/search.
+Generated `.env` also sets default Vespa ports and `WORKSPACE_ROOT=.`.

@@ -61,7 +61,7 @@ sample_data/                # Example documents
 
 ```bash
 uv sync
-# Export MISTRAL_API_KEY before copier copy to auto-fill .env (not prompted)
+# Set MISTRAL_API_KEY in .env (from copier copy or edit manually)
 make setup-vespa          # start container + migrate schema
 make ingest path=sample_data/hello.txt
 make search query="hello world"
