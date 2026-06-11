@@ -1,4 +1,4 @@
-.PHONY: installdeps install-workflows setup-vespa start-vespa stop-vespa reset-vespa migrate-vespa verify-vespa ingest search bruno generate-vespa-lock start-examples execute-ingestion execute-pipeline-ingestion
+.PHONY: installdeps install-workflows setup-vespa start-vespa stop-vespa reset-vespa migrate-vespa verify-vespa ingest search bruno generate-vespa-lock start-examples execute-ingestion
 
 ifneq (,$(wildcard .env))
 include .env
@@ -78,8 +78,3 @@ start-examples: install-workflows
 ## Usage: make execute-ingestion input='{"file_path": "sample_data/hello.txt", "collection_name": "mydocs"}'
 execute-ingestion: install-workflows
 	uv run python -m examples.workflows.start --workflow document-ingestion $(if $(input),--input '$(input)',--input '{"file_path":"sample_data/hello.txt"}')
-
-## Execute the advanced pipeline-step ingestion workflow
-## Usage: make execute-pipeline-ingestion input='{"file_path": "sample_data/hello.txt", "collection_name": "mydocs"}'
-execute-pipeline-ingestion: install-workflows
-	uv run python -m examples.workflows.start --workflow document-ingestion-pipeline $(if $(input),--input '$(input)',--input '{"file_path":"sample_data/hello.txt"}')

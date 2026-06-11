@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--workflow",
         default="document-ingestion",
-        help="Workflow name (document-ingestion or document-ingestion-pipeline)",
+        help="Workflow name (default: document-ingestion)",
     )
     parser.add_argument(
         "--input",

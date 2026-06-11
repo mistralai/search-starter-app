@@ -12,9 +12,8 @@ load_dotenv(override=True)
 import mistralai.workflows as workflows
 
 from examples.workflows.search import IngestionWorkflow
-from examples.workflows.search_pipeline import PipelineIngestionWorkflow
 
-EXAMPLE_WORKFLOWS = [IngestionWorkflow, PipelineIngestionWorkflow]
+EXAMPLE_WORKFLOWS = [IngestionWorkflow]
 
 
 async def main() -> None:
