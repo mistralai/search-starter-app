@@ -103,6 +103,14 @@ Temporal stores every activity input and output in Postgres. **Do not split inge
 
 **Anti-pattern:** one `@workflows.activity` per pipeline stage with serialized `File` / `Document` dicts passed between them. That pattern only works for tiny demo files and fills Temporal storage quickly.
 
+### Per-stage retries
+
+This starter example runs the full pipeline inside a single activity so Temporal only stores small inputs and outputs (paths in, chunk counts out).
+
+If you need to **split the pipeline into separate activities** — for example, independent retry policies on OCR or embedding — you must still keep activity arguments and return values small. Pass references (file paths, S3 URIs, content hashes) between steps, and store intermediate or expensive-step results in external storage rather than in workflow history.
+
+If you want to split the pipeline to enable retries for some stages, follow the [Handling Large Data](https://docs.mistral.ai/capabilities/workflows/guides/handling-large-data/) guide (`OffloadableField` + blob storage for activity payloads).
+
 ## Adding a new workflow example
 
 1. Create a subdirectory under `examples/workflows/` (e.g. `my_example/`).

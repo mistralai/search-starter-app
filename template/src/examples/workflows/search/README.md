@@ -62,6 +62,8 @@ You can also trigger the workflow from the [Mistral Console](https://console.mis
 
 Do **not** split ingestion into one activity per pipeline stage while passing serialized documents between them. Temporal persists every activity input/output in Postgres; that pattern duplicates large payloads and does not scale. See the parent [workflows README](../README.md#designing-ingestion-workflows-at-scale).
 
+If you want to split the pipeline to enable retries for some stages, follow the [Handling Large Data](https://docs.mistral.ai/capabilities/workflows/guides/handling-large-data/) guide instead of passing document content between activities.
+
 ## Key Difference from Direct Ingestion
 
 `make ingest` runs the same Search Toolkit pipeline synchronously. The workflow adds:
