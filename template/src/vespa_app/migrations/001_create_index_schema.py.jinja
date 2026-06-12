@@ -39,6 +39,8 @@ class CreateIndexSchemaMigration(VespaMigration):
             mode=SearchMode.INDEX,
             embedding_dimensions=128,
             schema_version=1,
+            # Auto-generated default profile; ships with all ranking weights at 0.
+            # The search entrypoint defaults to the tuned "hybrid-search" profile below.
             default_query_profile_name="hybrid-profile",
             id_field="document_filename",
         )

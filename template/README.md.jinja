@@ -48,6 +48,20 @@ Uses `QueryEngine` with `VectorRetriever` (hybrid BM25 + vector via Vespa):
 make search query="hello world"
 ```
 
+#### Custom query profile
+
+Ranking weights live in a Vespa **query profile**, not in the request. The search defaults to the `hybrid-search` profile (tuned BM25 + vector weights, defined in `src/vespa_app/migrations/001_create_index_schema.py`). Pass `query_profile=` to use another one:
+
+```bash
+make search query="hello world" query_profile=hybrid-profile
+```
+
+To add your own, register it with `add_query_profiles([...])` in a new `00X_*.py` migration, rerun `make migrate-vespa`, then select it by name:
+
+```bash
+make search query="hello world" query_profile=my-profile
+```
+
 ### Bruno API files (optional)
 
 ```bash
