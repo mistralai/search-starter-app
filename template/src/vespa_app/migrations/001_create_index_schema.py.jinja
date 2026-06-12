@@ -48,7 +48,7 @@ class CreateIndexSchemaMigration(VespaMigration):
                 QueryProfile(
                     name="hybrid-search",
                     fields=[
-                        QueryField(name="ranking.profile", value="root"),
+                        QueryField(name="ranking.profile", value="weighted-rank2"),
                         QueryField(name="hits", value=10),
                         QueryField(
                             name="ranking.features.query(bm25_chunks_max_weight)",
@@ -58,7 +58,6 @@ class CreateIndexSchemaMigration(VespaMigration):
                             name="ranking.features.query(bm25_chunks_avg_weight)",
                             value=0.3,
                         ),
-                        QueryField(name="ranking.features.query(bm25_title_weight)", value=0.5),
                         QueryField(
                             name="ranking.features.query(match_chunks_weight)",
                             value=0.5,
