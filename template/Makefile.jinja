@@ -49,9 +49,9 @@ ingest:
 	uv run python -m entrypoints.ingest $(path)
 
 ## Search the indexed collection (Search Toolkit QueryEngine)
-## Usage: make search query="hello world" [top_k=5]
+## Usage: make search query="hello world" [top_k=5] [query_profile=hybrid-search]
 search:
-	uv run python -m entrypoints.search "$(query)" $(if $(top_k),--top-k $(top_k),)
+	uv run python -m entrypoints.search "$(query)" $(if $(top_k),--top-k $(top_k),) $(if $(query_profile),--query-profile $(query_profile),)
 
 ## Generate Bruno API files under vespa/bruno/vespa/ (requires WORKSPACE_ROOT in .env)
 bruno:

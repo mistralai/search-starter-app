@@ -1,7 +1,7 @@
 """Search an indexed Vespa collection.
 
 Usage:
-    python -m entrypoints.search <query> [--top-k 5]
+    python -m entrypoints.search <query> [--top-k 5] [--query-profile hybrid-search]
 """
 
 import argparse
@@ -24,6 +24,11 @@ async def main() -> None:
     parser.add_argument(
         "--top-k", type=int, default=5, help="Number of results (default: 5)"
     )
+    parser.add_argument(
+        "--query-profile",
+        default="hybrid-search",
+        help="Vespa query profile to rank with (default: hybrid-search)",
+    )
     args = parser.parse_args()
 
     api_key = os.environ.get("MISTRAL_API_KEY", "")
@@ -39,6 +44,7 @@ async def main() -> None:
     vector_store = app.get_search_index(
         VespaClientConfig(endpoint=vespa_endpoint()),
         collection_name=collection_name,
+        query_profile=args.query_profile,
     )
     embedder = MistralEmbedder(client=mistral_client)
     query_engine = QueryEngine(
@@ -48,6 +54,7 @@ async def main() -> None:
     print(f"Query: {args.query!r}")
     print(f"Collection: {collection_name}")
     print(f"Top-K: {args.top_k}")
+    print(f"Query profile: {args.query_profile}")
 
     result = await query_engine.search(
         query=args.query,
