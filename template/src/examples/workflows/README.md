@@ -87,7 +87,7 @@ examples/workflows/
 ## Design principles
 
 - **Workflows for ingestion** — document ingestion is long-running and benefits from durability, retries, and observability in the Mistral Console.
-- **Search stays direct** — search queries use `make search` / `entrypoints/search.py` for low latency. Workflows are not needed for simple queries.
+- **Search stays direct** — search queries use `make search` / `entrypoints/search.py` for low latency. Workflows are not needed for queries.
 - **Small activity I/O** — the workflow passes file paths and collection names only. The full Search Toolkit pipeline runs inside a single `ingest_documents` activity; the activity returns a small result (`total_chunks`, `file_count`, …).
 - **Activities own all I/O** — filesystem access, API calls, and Vespa writes live in `activities.py`. The workflow body in `workflow.py` only orchestrates.
 
@@ -108,8 +108,6 @@ Temporal stores every activity input and output in Postgres. **Do not split inge
 This starter example runs the full pipeline inside a single activity so Temporal only stores small inputs and outputs (paths in, chunk counts out).
 
 If you need to **split the pipeline into separate activities** — for example, independent retry policies on OCR or embedding — you must still keep activity arguments and return values small. Pass references (file paths, S3 URIs, content hashes) between steps, and store intermediate or expensive-step results in external storage rather than in workflow history.
-
-If you want to split the pipeline to enable retries for some stages, follow the [Handling Large Data](https://docs.mistral.ai/capabilities/workflows/guides/handling-large-data/) guide (`OffloadableField` + blob storage for activity payloads).
 
 ## Adding a new workflow example
 
