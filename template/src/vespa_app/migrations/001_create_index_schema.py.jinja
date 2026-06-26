@@ -11,14 +11,14 @@ import os
 
 from vespa.package import QueryField
 
-from mistralai.search.toolkit.plugins.vespa.app.schemas.app import SearchMode
+from mistralai.search.toolkit.plugins.vespa.app.schemas.app import IndexingMode, SearchMode
 from mistralai.search.toolkit.plugins.vespa.app.schemas.query_profile import (
     QueryProfile,
 )
 from mistralai.search.toolkit.plugins.vespa.migration import (
     VespaMigration,
     add_query_profiles,
-    create_default_schema,
+    create_schema,
     set_app_name,
 )
 from mistralai.search.toolkit.plugins.vespa.search.ranking_profile import RankingProfile
@@ -34,15 +34,14 @@ class CreateIndexSchemaMigration(VespaMigration):
 
     def migrate(self) -> None:
         set_app_name(_COLLECTION)
-        create_default_schema(
+        create_schema(
             name=_COLLECTION,
             mode=SearchMode.INDEX,
             embedding_dimensions=128,
-            schema_version=1,
+            indexing_mode=IndexingMode.DOCUMENT_PER_CHUNK,
             # Auto-generated default profile; ships with all ranking weights at 0.
             # The search entrypoint defaults to the tuned "hybrid-search" profile below.
             default_query_profile_name="hybrid-profile",
-            id_field="document_filename",
         )
 
         add_query_profiles(
