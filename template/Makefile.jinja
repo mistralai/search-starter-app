@@ -1,4 +1,4 @@
-.PHONY: installdeps setup-vespa start-vespa stop-vespa reset-vespa migrate-vespa verify-vespa ingest search mcp bruno generate-vespa-lock
+.PHONY: installdeps setup-vespa start-vespa stop-vespa reset-vespa migrate-vespa verify-vespa ingest search mcp bruno generate-vespa-lock install-workflows start-examples execute-ingestion
 
 ifneq (,$(wildcard .env))
 include .env
@@ -73,3 +73,15 @@ generate-vespa-lock:
 		--app-dir src/vespa_app \
 		--path ./vespa.lock
 
+## Install optional workflows dependency (required for examples/workflows/)
+install-workflows:
+	uv sync --extra workflows
+
+## Start a worker that registers the example workflows (requires install-workflows)
+start-examples: install-workflows
+	uv run python -m examples.workflows.worker
+
+## Execute the ingestion workflow via the Mistral Workflows API
+## Usage: make execute-ingestion input='{"file_path": "sample_data/hello.txt", "collection_name": "mydocs"}'
+execute-ingestion: install-workflows
+	uv run python -m examples.workflows.start --workflow document-ingestion $(if $(input),--input '$(input)',--input '{"file_path":"sample_data/hello.txt"}')
