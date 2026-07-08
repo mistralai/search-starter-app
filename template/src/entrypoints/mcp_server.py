@@ -1,0 +1,352 @@
+"""MCP server exposing search and ingest tools for the local Vespa index."""
+
+import os
+from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import url2pathname
+
+import httpx
+from dotenv import load_dotenv
+from fastmcp import FastMCP
+from mistralai.client import Mistral
+from mistralai.search.toolkit.embedders import MistralEmbedder
+from mistralai.search.toolkit.ingestion import File
+from mistralai.search.toolkit.ingestion.extractors import (
+    MistralOCRExtractor,
+    PlainTextExtractor,
+)
+from mistralai.search.toolkit.ingestion.loaders import FilesystemFileLoader
+from mistralai.search.toolkit.ingestion.pipelines import Pipeline
+from mistralai.search.toolkit.ingestion.text_splitters import (
+    MarkdownTextSplitter,
+    MarkdownTextSplitterConfig,
+)
+from mistralai.search.toolkit.plugins.vespa import VespaClientConfig
+from mistralai.search.toolkit.retrieval import QueryEngine, VectorRetriever
+from mistralai.search.toolkit.search import GrepMode, NavigableIndex, NavigationDirection
+from vespa_app import app, vespa_endpoint
+
+load_dotenv(override=True)
+
+_TEXT_SUFFIXES = {".txt", ".md", ".markdown", ".csv", ".json"}
+
+# ---------------------------------------------------------------------------
+# Startup — fail fast if the environment is misconfigured
+# ---------------------------------------------------------------------------
+
+_api_key = os.environ.get("MISTRAL_API_KEY", "")
+if not _api_key:
+    raise RuntimeError("MISTRAL_API_KEY is not set. Check your .env file.")
+
+_collection_name = os.environ.get("COLLECTION_NAME", "exampledocs")
+
+_mistral_client = Mistral(
+    api_key=_api_key,
+    server_url=os.getenv("MISTRAL_API_URL", "https://api.mistral.ai"),
+)
+_embedder = MistralEmbedder(client=_mistral_client)
+_vector_store = app.get_search_index(
+    VespaClientConfig(endpoint=vespa_endpoint()),
+    collection_name=_collection_name,
+)
+if not isinstance(_vector_store, NavigableIndex):
+    raise RuntimeError(
+        "The search index does not support agentic navigation. "
+        "Ensure IndexingMode.DOCUMENT_PER_CHUNK is used in the schema migration."
+    )
+_navigable_store: NavigableIndex = _vector_store
+_query_engine = QueryEngine(
+    retriever=[VectorRetriever(client=_vector_store, embedder=_embedder)],
+)
+
+_loader = FilesystemFileLoader()
+_text_splitter = MarkdownTextSplitter(
+    MarkdownTextSplitterConfig(chunk_size=4096, chunk_overlap=50)
+)
+_plain_text_pipeline = Pipeline(
+    loader=_loader,
+    extractor=PlainTextExtractor(),
+    text_splitter=_text_splitter,
+    embedder=_embedder,
+    stores=_vector_store,
+)
+_ocr_pipeline = Pipeline(
+    loader=_loader,
+    extractor=MistralOCRExtractor(client=_mistral_client),
+    text_splitter=_text_splitter,
+    embedder=_embedder,
+    stores=_vector_store,
+)
+
+# ---------------------------------------------------------------------------
+# MCP server
+# ---------------------------------------------------------------------------
+
+mcp = FastMCP(
+    "Search Starter App Documents",
+    instructions=(
+        "Provides search over a local document index for the starter app. "
+        "Supports both quick lookup and deep retrieval across long documents, "
+        "including navigation within a document after an initial search hit. "
+        "Also supports ingesting new documents into the index."
+    ),
+)
+
+
+def _format_chunks(results: list) -> list[dict]:
+    """Serialise SearchResult objects into a consistent dict shape.
+
+    Includes start_offset / end_offset so the model can pass them directly
+    to the agentic navigation tools (open_source, navigate_source, …).
+    """
+    return [
+        {
+            "score": hit.score,
+            "content": hit.chunk.content,
+            "source_id": hit.chunk.source_id,
+            "locator": hit.chunk.locator,
+            "start_offset": hit.chunk.start_offset,
+            "end_offset": hit.chunk.end_offset,
+            "metadata": hit.chunk.metadata,
+        }
+        for hit in results
+    ]
+
+
+@mcp.tool()
+async def search(query: str, top_k: int = 5) -> list[dict]:
+    """Search the indexed document collection using hybrid BM25 + vector retrieval.
+
+    Returns up to top_k chunks ranked by relevance. Each result contains the
+    chunk content, relevance score, source document identifier, character offsets,
+    and metadata.
+
+    Use the returned source_id, start_offset, and end_offset with the agentic
+    navigation tools (open_source, navigate_source, read_source, grep_source) to
+    drill into a promising document without re-running a global search.
+
+    Args:
+        query: Natural-language search query.
+        top_k: Maximum number of results to return (default 5).
+    """
+    result = await _query_engine.search(
+        query=query,
+        top_k=top_k,
+        include_metadata=True,
+        include_content=True,
+    )
+    return _format_chunks(result.results)
+
+
+def _pipeline_for_name(name: str) -> Pipeline:
+    """Return the plain-text or OCR pipeline based on the file extension."""
+    return (
+        _plain_text_pipeline
+        if Path(name).suffix.lower() in _TEXT_SUFFIXES
+        else _ocr_pipeline
+    )
+
+
+def _filename_from_url(url: str, headers: httpx.Headers) -> str:
+    """Derive a filename from a Content-Disposition header or the URL path."""
+    cd = headers.get("content-disposition", "")
+    if cd:
+        for part in cd.split(";"):
+            part = part.strip()
+            if part.lower().startswith("filename="):
+                return part.split("=", 1)[1].strip().strip('"')
+    name = urlparse(url).path.rstrip("/").rsplit("/", 1)[-1]
+    return name or "download"
+
+
+async def _ingest_http(url: str) -> str:
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        r = await client.get(url)
+        r.raise_for_status()
+        name = _filename_from_url(url, r.headers)
+        content = r.content
+
+    file = File(path=url, name=name, raw=content, source_id=url)
+    doc = await _pipeline_for_name(name).run_file(file)
+    return f"Indexed {len(doc.chunks)} chunks from '{url}' into '{_collection_name}'."
+
+
+async def _ingest_local(root: Path) -> str:
+    if not root.exists():
+        return f"Error: path not found: {root}"
+
+    if root.is_file():
+        documents = [root]
+    elif root.is_dir():
+        documents = sorted(p for p in root.rglob("*") if p.is_file())
+        if not documents:
+            return f"Error: no files found under {root}"
+    else:
+        return f"Error: {root} is neither a file nor a directory"
+
+    total_chunks = 0
+    for doc_path in documents:
+        total_chunks += await _pipeline_for_name(doc_path.name).run(
+            documents=[doc_path], use_checkpoint=False
+        )
+    return (
+        f"Indexed {total_chunks} chunks from {len(documents)} file(s)"
+        f" into '{_collection_name}'."
+    )
+
+
+@mcp.tool()
+async def ingest(uri: str) -> str:
+    """Ingest a document into the Vespa search index.
+
+    Accepts a local path, a file:// URI, or an http/https URL. Directories are
+    walked recursively when given a local path. Text files (.txt, .md, .csv,
+    .json) use plain-text extraction; all other formats (PDF, DOCX, …) are
+    processed with Mistral OCR.
+
+    Args:
+        uri: Local file/directory path, file:// URI, or http(s):// URL.
+
+    Returns:
+        A summary of how many chunks were indexed, or an error message.
+    """
+    parsed = urlparse(uri)
+
+    if parsed.scheme in ("http", "https"):
+        return await _ingest_http(uri)
+
+    if parsed.scheme == "file":
+        return await _ingest_local(Path(url2pathname(parsed.path)))
+
+    # Bare local path (no scheme)
+    return await _ingest_local(Path(uri))
+
+
+# ---------------------------------------------------------------------------
+# Agentic navigation tools  (RFC: Agentic Search Loop)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def open_source(
+    source_id: str, start_offset: int, end_offset: int, window: int = 2
+) -> list[dict]:
+    """Expand around a retrieved chunk to read its surrounding context.
+
+    Use this after a search() hit when the relevant answer may be just outside
+    the retrieved chunk. Returns up to `window` chunks before and after the
+    anchor position, plus the anchor chunk itself, all in reading order.
+
+    Args:
+        source_id:    Source identifier from a search() result.
+        start_offset: start_offset from the anchor search() result.
+        end_offset:   end_offset from the anchor search() result.
+        window:       Number of adjacent chunks to fetch in each direction (default 2).
+    """
+    prev = await _navigable_store.navigate(
+        source_id, start_offset, end_offset, NavigationDirection.PREVIOUS, top_k=window
+    )
+    current = await _navigable_store.read(source_id, start_offset, end_offset)
+    nxt = await _navigable_store.navigate(
+        source_id, start_offset, end_offset, NavigationDirection.NEXT, top_k=window
+    )
+    return _format_chunks(prev + current + nxt)
+
+
+@mcp.tool()
+async def navigate_source(
+    source_id: str,
+    start_offset: int,
+    end_offset: int,
+    direction: str,
+    top_k: int = 1,
+) -> list[dict]:
+    """Step forward or backward through a document from a known position.
+
+    Use this to move page-by-page through a long document after opening it,
+    or to scan in a specific direction from a retrieved anchor chunk.
+
+    Args:
+        source_id:    Source identifier from a search() or open_source() result.
+        start_offset: start_offset of the current anchor chunk.
+        end_offset:   end_offset of the current anchor chunk.
+        direction:    "next" to move forward, "previous" to move backward.
+        top_k:        Number of chunks to retrieve in the given direction (default 1).
+    """
+    nav_dir = NavigationDirection(direction)
+    results = await _navigable_store.navigate(
+        source_id, start_offset, end_offset, nav_dir, top_k=top_k
+    )
+    return _format_chunks(results)
+
+
+@mcp.tool()
+async def read_source(
+    source_id: str,
+    start_offset: int | None = None,
+    end_offset: int | None = None,
+    top_k: int = 20,
+) -> list[dict]:
+    """Read chunks from a known character-offset range within a source.
+
+    Use this when you already know the approximate region of interest (e.g. a
+    page range or section offset) and want to fetch its content directly without
+    running a new global search.
+
+    Pass None for start_offset to read from the beginning, or None for
+    end_offset to read to the end of the document.
+
+    Args:
+        source_id:    Source identifier from a search() result.
+        start_offset: Inclusive lower bound (None = start of document).
+        end_offset:   Inclusive upper bound (None = end of document).
+        top_k:        Maximum number of chunks to return (default 20).
+    """
+    results = await _navigable_store.read(source_id, start_offset, end_offset, top_k=top_k)
+    return _format_chunks(results)
+
+
+@mcp.tool()
+async def grep_source(
+    source_id: str,
+    pattern: str,
+    mode: str = "phrase",
+    top_k: int = 5,
+) -> list[dict]:
+    """Lexical search for a pattern within a single source document.
+
+    Use this to locate a specific term, name, or exact phrase inside a document
+    you have already identified via search(), without re-running a global search.
+
+    Args:
+        source_id: Source identifier from a search() result.
+        pattern:   Text to search for.
+        mode:      "phrase" (default) — terms must appear in exact order;
+                   "term" — all terms must appear but in any order.
+        top_k:     Maximum number of matching chunks to return (default 5).
+    """
+    grep_mode = GrepMode(mode)
+    results = await _navigable_store.grep(source_id, pattern, mode=grep_mode, top_k=top_k)
+    return _format_chunks(results)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run the MCP server.")
+    parser.add_argument(
+        "--http",
+        action="store_true",
+        help="Start in HTTP (streamable-HTTP) mode instead of the default stdio mode.",
+    )
+    parser.add_argument(
+        "--host", default="127.0.0.1", help="Bind host (HTTP mode only, default: 127.0.0.1)."
+    )
+    parser.add_argument(
+        "--port", type=int, default=8000, help="Bind port (HTTP mode only, default: 8000)."
+    )
+    args = parser.parse_args()
+
+    if args.http:
+        mcp.run(transport="http", host=args.host, port=args.port)
+    else:
+        mcp.run()

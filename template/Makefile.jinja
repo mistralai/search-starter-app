@@ -1,4 +1,4 @@
-.PHONY: installdeps install-workflows setup-vespa start-vespa stop-vespa reset-vespa migrate-vespa verify-vespa ingest search bruno generate-vespa-lock start-examples execute-ingestion
+.PHONY: installdeps setup-vespa start-vespa stop-vespa reset-vespa migrate-vespa verify-vespa ingest search mcp bruno generate-vespa-lock
 
 ifneq (,$(wildcard .env))
 include .env
@@ -10,6 +10,8 @@ VESPA_QUERY_PORT := $(or $(VESPA_QUERY_PORT),18080)
 VESPA_CONFIG_PORT := $(or $(VESPA_CONFIG_PORT),19072)
 VESPA_ENDPOINT := $(or $(VESPA_ENDPOINT),http://localhost:$(VESPA_QUERY_PORT))
 VESPA_CONFIG_URL := $(or $(VESPA_CONFIG_URL),http://localhost:$(VESPA_CONFIG_PORT))
+MCP_HOST := $(or $(host),127.0.0.1)
+MCP_PORT := $(or $(port),8000)
 
 ## Install dependencies
 installdeps:
@@ -53,6 +55,11 @@ ingest:
 search:
 	uv run python -m entrypoints.search "$(query)" $(if $(top_k),--top-k $(top_k),) $(if $(query_profile),--query-profile $(query_profile),)
 
+## Start the MCP server in HTTP mode
+## Usage: make mcp [host=0.0.0.0] [port=8000]
+mcp:
+	uv run python -m entrypoints.mcp_server --http --host $(MCP_HOST) --port $(MCP_PORT)
+
 ## Generate Bruno API files under vespa/bruno/vespa/ (requires WORKSPACE_ROOT in .env)
 bruno:
 	uv run mistral-vespa bruno \
@@ -66,15 +73,3 @@ generate-vespa-lock:
 		--app-dir src/vespa_app \
 		--path ./vespa.lock
 
-## Install optional workflows dependency (required for examples/workflows/)
-install-workflows:
-	uv sync --extra workflows
-
-## Start a worker that registers the example workflows (requires install-workflows)
-start-examples: install-workflows
-	uv run python -m examples.workflows.worker
-
-## Execute the ingestion workflow via the Mistral Workflows API
-## Usage: make execute-ingestion input='{"file_path": "sample_data/hello.txt", "collection_name": "mydocs"}'
-execute-ingestion: install-workflows
-	uv run python -m examples.workflows.start --workflow document-ingestion $(if $(input),--input '$(input)',--input '{"file_path":"sample_data/hello.txt"}')
