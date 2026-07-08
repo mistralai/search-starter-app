@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from fastmcp import FastMCP
 from mistralai.client import Mistral
 from mistralai.search.toolkit.embedders import MistralEmbedder
+from mistralai.search.toolkit.document import compute_id
 from mistralai.search.toolkit.ingestion import File
 from mistralai.search.toolkit.ingestion.extractors import (
     MistralOCRExtractor,
@@ -24,6 +25,7 @@ from mistralai.search.toolkit.ingestion.text_splitters import (
 from mistralai.search.toolkit.plugins.vespa import VespaClientConfig
 from mistralai.search.toolkit.retrieval import QueryEngine, VectorRetriever
 from mistralai.search.toolkit.search import GrepMode, NavigableIndex, NavigationDirection
+from mistralai.search.toolkit.search.errors import DocumentNotFoundError
 from vespa_app import app, vespa_endpoint
 
 load_dotenv(override=True)
@@ -220,6 +222,26 @@ async def ingest(uri: str) -> str:
 
     # Bare local path (no scheme)
     return await _ingest_local(Path(uri))
+
+
+@mcp.tool()
+async def delete(source_id: str) -> str:
+    """Delete a document and all its chunks from the search index.
+
+    Use the source_id returned by search() or ingest() to identify the
+    document to remove. All chunks belonging to that document are deleted.
+
+    Args:
+        source_id: Source identifier of the document to delete.
+
+    Returns:
+        A confirmation message, or an error message if the document was not found.
+    """
+    try:
+        await _vector_store.delete_document(compute_id(source_id))
+        return f"Deleted document '{source_id}' from '{_collection_name}'."
+    except DocumentNotFoundError:
+        return f"Error: document '{source_id}' not found in '{_collection_name}'."
 
 
 # ---------------------------------------------------------------------------
