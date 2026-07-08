@@ -11,8 +11,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Kept for users who want to build workflow examples on top of this starter app.
-# The Makefile no longer installs this automatically; run `uv sync --extra workflows` manually.
 workflows = [
     "mistralai-workflows[mistralai]>=3.0.0,<4",
     "pydantic",
