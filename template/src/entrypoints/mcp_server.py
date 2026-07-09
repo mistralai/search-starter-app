@@ -50,6 +50,7 @@ _embedder = MistralEmbedder(client=_mistral_client)
 _vector_store = app.get_search_index(
     VespaClientConfig(endpoint=vespa_endpoint()),
     collection_name=_collection_name,
+    query_profile="hybrid-search",
 )
 if not isinstance(_vector_store, NavigableIndex):
     raise RuntimeError(
