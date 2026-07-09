@@ -66,19 +66,16 @@ Set FontSize 24
 Set Width 1200
 Set Height 600
 
-Env VIBE_HOME "/Users/martin.devillers/Projects/mistral/search-starter-app-demo/vibe"
+# Env VIBE_HOME "..."
 
 # Copy project
-Hide
-Type 'copier() { command copier "$@" --vcs-ref=mdevillers/add-mcp-server; }'
-Enter
-Ctrl+L
-Show
 Type "copier copy gh:mistralai/search-starter-app my-search-project"
 Enter
 Sleep 2s
-Type jIwIFx9ZLq7ovQFIbPhfdjMnlJdOrMCp
+Hide
+Type '...' # API Key
 Enter
+Show
 Sleep 1s
 Enter
 Sleep 1s
