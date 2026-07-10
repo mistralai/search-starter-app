@@ -124,9 +124,20 @@ async def search(query: str, top_k: int = 5) -> list[dict]:
     chunk content, relevance score, source document identifier, character offsets,
     and metadata.
 
-    Use the returned source_id, start_offset, and end_offset with the agentic
-    navigation tools (open_source, navigate_source, read_source, grep_source) to
-    drill into a promising document without re-running a global search.
+    Start here for any query. To scope results to a specific document, include
+    its title or source_id in the query — BM25 scoring against doc_title makes
+    this effective without a filter parameter.
+
+    If results are from the wrong documents, refine the query with more specific
+    terms rather than accepting poor hits.
+
+    After finding a promising hit, drill in without re-running a global search:
+    - open_source      — expand context around the chunk
+    - grep_source      — jump to an exact term or section within the same document
+    - navigate_source  — step sequentially through adjacent chunks
+
+    Call search() again with a new query informed by what you have already read
+    to connect information across multiple documents.
 
     Args:
         query: Natural-language search query.
@@ -259,6 +270,12 @@ async def open_source(
     the retrieved chunk. Returns up to `window` chunks before and after the
     anchor position, plus the anchor chunk itself, all in reading order.
 
+    After opening, continue with:
+    - navigate_source — to step sequentially through the document
+    - grep_source     — to jump to a specific term within the same document
+    - search          — to find a semantically different section (include the
+                        source_id or title in the query to stay scoped)
+
     Args:
         source_id:    Source identifier from a search() result.
         start_offset: start_offset from the anchor search() result.
@@ -285,8 +302,9 @@ async def navigate_source(
 ) -> list[dict]:
     """Step forward or backward through a document from a known position.
 
-    Use this to move page-by-page through a long document after opening it,
-    or to scan in a specific direction from a retrieved anchor chunk.
+    Use for sequential reading — e.g. reading through a section step by step. Prefer grep_source when you have a target keyword,
+    or search() with the source_id or document title in the query when you need
+    to jump to a semantically different section.
 
     Args:
         source_id:    Source identifier from a search() or open_source() result.
@@ -338,7 +356,10 @@ async def grep_source(
     """Lexical search for a pattern within a single source document.
 
     Use this to locate a specific term, name, or exact phrase inside a document
-    you have already identified via search(), without re-running a global search.
+    you have already identified via search(). Heuristic: grep for exact words or
+    phrases ("section 3", "error code 404", "last updated"); use search() for
+    semantic intent ("what is the cancellation policy"). Faster and more precise
+    than navigate_source when you have a known keyword target.
 
     Args:
         source_id: Source identifier from a search() result.
