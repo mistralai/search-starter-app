@@ -88,10 +88,18 @@ _ocr_pipeline = Pipeline(
 mcp = FastMCP(
     "Search Starter App Documents",
     instructions=(
-        "Provides search over a local document index for the starter app. "
-        "Supports both quick lookup and deep retrieval across long documents, "
-        "including navigation within a document after an initial search hit. "
-        "Also supports ingesting new documents into the index."
+        "Search and navigate a local document index.\n\n"
+        "Retrieval loop: start with `search` to find relevant chunks across the "
+        "collection, then drill into a promising hit *within its document* without "
+        "re-running a global search:\n"
+        "- `open`     — expand context around a chunk\n"
+        "- `grep`     — jump to an exact term or phrase in the same document\n"
+        "- `navigate` — step sequentially through adjacent chunks\n"
+        "- `read`     — read a known character-offset range\n"
+        "Then call `search` again with a query informed by what you have read to "
+        "connect information across documents. To scope a search to one document, "
+        "include its title or source_id in the query.\n\n"
+        "`ingest` adds new documents to the index; `delete` removes them."
     ),
 )
 
@@ -100,7 +108,7 @@ def _format_chunks(results: list) -> list[dict]:
     """Serialise SearchResult objects into a consistent dict shape.
 
     Includes start_offset / end_offset so the model can pass them directly
-    to the agentic navigation tools (open_source, navigate_source, …).
+    to the agentic navigation tools (open, navigate, …).
     """
     return [
         {
@@ -118,26 +126,7 @@ def _format_chunks(results: list) -> list[dict]:
 
 @mcp.tool()
 async def search(query: str, top_k: int = 5) -> list[dict]:
-    """Search the indexed document collection using hybrid BM25 + vector retrieval.
-
-    Returns up to top_k chunks ranked by relevance. Each result contains the
-    chunk content, relevance score, source document identifier, character offsets,
-    and metadata.
-
-    Start here for any query. To scope results to a specific document, include
-    its title or source_id in the query — BM25 scoring against doc_title makes
-    this effective without a filter parameter.
-
-    If results are from the wrong documents, refine the query with more specific
-    terms rather than accepting poor hits.
-
-    After finding a promising hit, drill in without re-running a global search:
-    - open_source      — expand context around the chunk
-    - grep_source      — jump to an exact term or section within the same document
-    - navigate_source  — step sequentially through adjacent chunks
-
-    Call search() again with a new query informed by what you have already read
-    to connect information across multiple documents.
+    """Search the document collection with hybrid BM25 + vector retrieval.
 
     Args:
         query: Natural-language search query.
@@ -261,20 +250,10 @@ async def delete(source_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def open_source(
+async def open(
     source_id: str, start_offset: int, end_offset: int, window: int = 2
 ) -> list[dict]:
-    """Expand around a retrieved chunk to read its surrounding context.
-
-    Use this after a search() hit when the relevant answer may be just outside
-    the retrieved chunk. Returns up to `window` chunks before and after the
-    anchor position, plus the anchor chunk itself, all in reading order.
-
-    After opening, continue with:
-    - navigate_source — to step sequentially through the document
-    - grep_source     — to jump to a specific term within the same document
-    - search          — to find a semantically different section (include the
-                        source_id or title in the query to stay scoped)
+    """Expand context around a retrieved chunk, returning adjacent chunks in reading order.
 
     Args:
         source_id:    Source identifier from a search() result.
@@ -293,7 +272,7 @@ async def open_source(
 
 
 @mcp.tool()
-async def navigate_source(
+async def navigate(
     source_id: str,
     start_offset: int,
     end_offset: int,
@@ -302,12 +281,8 @@ async def navigate_source(
 ) -> list[dict]:
     """Step forward or backward through a document from a known position.
 
-    Use for sequential reading — e.g. reading through a section step by step. Prefer grep_source when you have a target keyword,
-    or search() with the source_id or document title in the query when you need
-    to jump to a semantically different section.
-
     Args:
-        source_id:    Source identifier from a search() or open_source() result.
+        source_id:    Source identifier from a search() or open() result.
         start_offset: start_offset of the current anchor chunk.
         end_offset:   end_offset of the current anchor chunk.
         direction:    "next" to move forward, "previous" to move backward.
@@ -321,17 +296,13 @@ async def navigate_source(
 
 
 @mcp.tool()
-async def read_source(
+async def read(
     source_id: str,
     start_offset: int | None = None,
     end_offset: int | None = None,
     top_k: int = 20,
 ) -> list[dict]:
     """Read chunks from a known character-offset range within a source.
-
-    Use this when you already know the approximate region of interest (e.g. a
-    page range or section offset) and want to fetch its content directly without
-    running a new global search.
 
     Pass None for start_offset to read from the beginning, or None for
     end_offset to read to the end of the document.
@@ -347,19 +318,13 @@ async def read_source(
 
 
 @mcp.tool()
-async def grep_source(
+async def grep(
     source_id: str,
     pattern: str,
     mode: str = "phrase",
     top_k: int = 5,
 ) -> list[dict]:
-    """Lexical search for a pattern within a single source document.
-
-    Use this to locate a specific term, name, or exact phrase inside a document
-    you have already identified via search(). Heuristic: grep for exact words or
-    phrases ("section 3", "error code 404", "last updated"); use search() for
-    semantic intent ("what is the cancellation policy"). Faster and more precise
-    than navigate_source when you have a known keyword target.
+    """Lexical search for an exact term or phrase within a single document.
 
     Args:
         source_id: Source identifier from a search() result.
