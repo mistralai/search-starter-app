@@ -64,19 +64,32 @@ template/
         └── migrations/               # mistral-vespa migrate (hybrid query profile)
 ```
 
+Port selection is intentionally not part of the initial Copier questions. Generated projects default to `18080` / `19072`; if needed later, users can edit `.env` (`VESPA_QUERY_PORT`, `VESPA_CONFIG_PORT`) without re-generating the project.
+
 ## Quick start (after `copier copy`)
+
+![Demo](demo.gif)
 
 These commands run in the **generated project**. The repo root `Makefile` is only for template CI.
 
 ```bash
 cd my-search-project
 make setup-vespa
-make ingest path=sample_data/hello.txt
-make search query="hello world"
-make bruno   # optional: API files under vespa/bruno/vespa/
+vibe --trust  # Or your agent of choice
 ```
 
-Port selection is intentionally not part of the initial Copier questions. Generated projects default to `18080` / `19072`; if needed later, users can edit `.env` (`VESPA_QUERY_PORT`, `VESPA_CONFIG_PORT`) without re-generating the project.
+Alternatively, run the ingest and search entrypoints directly:
+
+```bash
+make ingest path=sample_data/hello.txt
+make search query="hello world"
+```
+
+Generate [Bruno](https://www.usebruno.com/) API collection files to explore the Vespa query and document APIs interactively:
+
+```bash
+make bruno
+```
 
 ## Variables
 

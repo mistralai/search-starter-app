@@ -43,6 +43,7 @@ _test-wheel-contents:
 	cd $(GENERATED_PROJECT) && rm -rf dist && uv build --wheel > /dev/null
 	cd $(GENERATED_PROJECT) && unzip -l dist/*.whl \
 		| grep -q "entrypoints/ingest.py" \
+		&& unzip -l dist/*.whl | grep -q "entrypoints/mcp_server.py" \
 		&& unzip -l dist/*.whl | grep -q "vespa_app/__init__.py" \
 		&& echo "OK: wheel contains entrypoints and vespa_app" \
 		|| (echo "FAIL: wheel is missing required packages" && exit 1)
