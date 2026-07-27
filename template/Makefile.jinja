@@ -1,5 +1,5 @@
 {% if backend == 'vespa' -%}
-.PHONY: installdeps install-workflows setup-vespa start-vespa stop-vespa reset-vespa migrate-vespa verify-vespa ingest search bruno generate-vespa-lock start-examples execute-ingestion
+.PHONY: installdeps install-workflows setup-vespa start-vespa stop-vespa reset-vespa migrate-vespa verify-vespa ingest search mcp bruno generate-vespa-lock start-examples execute-ingestion
 
 ifneq (,$(wildcard .env))
 include .env
@@ -11,6 +11,8 @@ VESPA_QUERY_PORT := $(or $(VESPA_QUERY_PORT),18080)
 VESPA_CONFIG_PORT := $(or $(VESPA_CONFIG_PORT),19072)
 VESPA_ENDPOINT := $(or $(VESPA_ENDPOINT),http://localhost:$(VESPA_QUERY_PORT))
 VESPA_CONFIG_URL := $(or $(VESPA_CONFIG_URL),http://localhost:$(VESPA_CONFIG_PORT))
+MCP_HOST := $(or $(host),127.0.0.1)
+MCP_PORT := $(or $(port),8000)
 
 ## Install dependencies
 installdeps:
@@ -54,6 +56,11 @@ ingest:
 search:
 	uv run python -m entrypoints.search "$(query)" $(if $(top_k),--top-k $(top_k),) $(if $(query_profile),--query-profile $(query_profile),)
 
+## Start the MCP server in HTTP mode
+## Usage: make mcp [host=0.0.0.0] [port=8000]
+mcp:
+	uv run python -m entrypoints.mcp_server --http --host $(MCP_HOST) --port $(MCP_PORT)
+
 ## Generate Bruno API files under vespa/bruno/vespa/ (requires WORKSPACE_ROOT in .env)
 bruno:
 	uv run mistral-vespa bruno \
@@ -67,7 +74,7 @@ generate-vespa-lock:
 		--app-dir src/search_app \
 		--path ./vespa.lock
 {%- else -%}
-.PHONY: installdeps install-workflows setup-postgres start-postgres stop-postgres reset-postgres create-schema ingest search start-examples execute-ingestion
+.PHONY: installdeps install-workflows setup-postgres start-postgres stop-postgres reset-postgres create-schema ingest search mcp start-examples execute-ingestion
 
 ifneq (,$(wildcard .env))
 include .env
@@ -75,6 +82,8 @@ export
 endif
 
 POSTGRES_CONTAINER := {{ _copier_conf.dst_path.name }}-postgres
+MCP_HOST := $(or $(host),127.0.0.1)
+MCP_PORT := $(or $(port),8000)
 
 ## Install dependencies
 installdeps:
@@ -108,6 +117,11 @@ ingest:
 ## Usage: make search query="hello world" [top_k=5]
 search:
 	uv run python -m entrypoints.search "$(query)" $(if $(top_k),--top-k $(top_k),)
+
+## Start the MCP server in HTTP mode (Postgres must be running)
+## Usage: make mcp [host=0.0.0.0] [port=8000]
+mcp:
+	uv run python -m entrypoints.mcp_server --http --host $(MCP_HOST) --port $(MCP_PORT)
 {%- endif %}
 
 ## Install optional workflows dependency (required for examples/workflows/)
