@@ -1,0 +1,78 @@
+{% if backend == 'vespa' -%}
+import os
+from pathlib import Path
+
+from mistralai.search.toolkit.plugins.vespa import VespaApp, VespaClientConfig
+
+# Default query profile applied by the search entrypoint (tuned BM25 + vector
+# weights). Defined in ``migrations/001_vespa_create_index_schema.py``.
+DEFAULT_QUERY_PROFILE = "hybrid-search"
+
+app = VespaApp(Path(__file__).parent)
+
+
+def vespa_endpoint() -> str:
+    """Query API URL from VESPA_QUERY_PORT (or optional VESPA_ENDPOINT override)."""
+    if url := os.environ.get("VESPA_ENDPOINT"):
+        return url
+    port = os.environ.get("VESPA_QUERY_PORT", "18080")
+    return f"http://localhost:{port}"
+
+
+def get_index(collection_name: str, query_profile: str = DEFAULT_QUERY_PROFILE):
+    """Return a live store index for ``collection_name`` on the configured backend."""
+    return app.get_search_index(
+        VespaClientConfig(endpoint=vespa_endpoint()),
+        collection_name=collection_name,
+        query_profile=query_profile,
+    )
+{%- else -%}
+import os
+
+from mistralai.search.toolkit.document import Document
+from mistralai.search.toolkit.plugins.postgres import (
+    CollectionSchema,
+    PostgresApp,
+    PostgresConnectionConfig,
+)
+
+# Embedding dimension must match the embedder used in the entrypoints.
+# MistralEmbedder defaults to the 128-dimension model.
+_EMBEDDING_DIM = 128
+_COLLECTION_NAME = os.environ.get("COLLECTION_NAME", "{{ collection_name }}")
+
+app = PostgresApp(
+    [
+        CollectionSchema(
+            collection_name=_COLLECTION_NAME,
+            document_type=Document,
+            dim=_EMBEDDING_DIM,
+            distance_metric="cosine",
+        )
+    ]
+)
+
+
+def postgres_dsn() -> str:
+    """Postgres DSN from POSTGRES_DSN (falls back to the local dev default)."""
+    return os.environ.get(
+        "POSTGRES_DSN", "postgresql://postgres:postgres@localhost:5432/postgres"
+    )
+
+
+def _connection_config() -> PostgresConnectionConfig:
+    return PostgresConnectionConfig(dsn=postgres_dsn())
+
+
+def get_index(collection_name: str):
+    """Return a live store index for ``collection_name`` on the configured backend."""
+    return app.get_search_index(
+        _connection_config(),
+        collection_name=collection_name,
+    )
+
+
+async def create_schema(collection_name: str) -> None:
+    """Create the pgvector extension and table for ``collection_name``."""
+    await app.create_schema(_connection_config(), collection_name=collection_name)
+{%- endif %}

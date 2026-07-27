@@ -22,13 +22,18 @@
 | `llm` | `MistralChat`, `LLMConfig`, ... |
 | `storage` | `ObjectStorage`, `ObjectStorageFactory`, `FilesystemStorage` |
 | `evals` | evaluation helpers (see module) |
+{% if backend == 'vespa' -%}
 | `plugins.vespa` | `VespaSearchIndex`, `VespaClientConfig`, `VespaApp`, `VespaAppDefinition`, evaluators, migration |
+{%- else -%}
+| `plugins.postgres` | `PostgresStoreIndex`, `PostgresApp`, `CollectionSchema`, `PostgresConnectionConfig`, `create_engine`, `PostgresColumn`, `build_table` |
+{%- endif %}
 
 ## PyPI optional extras (`mistralai-search-toolkit`)
 
 | Extra | Pulls in |
 |-------|----------|
 | `vespa` | vespa plugin |
+| `postgres` | postgres (pgvector) plugin |
 | `storage-gcs` | GCS plugin |
 | `storage-azure` | azure plugin |
 | `extractor-pymupdf` | pymupdfpro |
@@ -38,7 +43,7 @@
 | `text-splitter-langchain` | langchain splitters |
 | `all` | bundles common extras |
 
-Separate wheels (install explicitly): `mistralai-search-toolkit-storage-s3`, `mistralai-search-toolkit-plugins-vespa`, etc.
+Separate wheels (install explicitly): `mistralai-search-toolkit-storage-s3`, `mistralai-search-toolkit-plugins-vespa`, `mistralai-search-toolkit-plugins-postgres`, etc.
 
 ## Exceptions (domain → import)
 
@@ -49,7 +54,11 @@ Separate wheels (install explicitly): `mistralai-search-toolkit-storage-s3`, `mi
 | `RetrieverException`, `RerankerException`, `CacheException` | `retrieval.errors` |
 | `EmbedderException`, `TooManyTokensException` | `embedders.errors` |
 | `LLMException` | `llm.errors` |
+{% if backend == 'vespa' -%}
 | `VespaIndexException` | `plugins.vespa` |
+{%- else -%}
+| `IndexingError`, `SearchError`, `DocumentNotFoundError` | `indices.errors` (raised by the postgres index) |
+{%- endif %}
 
 ## Ragnarok → toolkit renames
 
@@ -109,6 +118,7 @@ Returns chunk count (int). Pass `context=IngestContext()` for custom ingest scop
 | `MISTRAL_API_KEY` | from `copier copy` | Set during `copier copy` (secret prompt) or edit `.env` |
 | `MISTRAL_API_URL` | `https://api.mistral.ai` | Optional custom API base URL |
 
+{% if backend == 'vespa' -%}
 ### Vespa (search-starter-app `.env`)
 
 Host ports are the source of truth. URLs are derived as `http://localhost:{port}` unless overridden.
@@ -117,26 +127,23 @@ Host ports are the source of truth. URLs are derived as `http://localhost:{port}
 |----------|------------------|------|
 | `VESPA_QUERY_PORT` | `18080` | Query/document API host port (`docker-compose` maps to container `:8080`) |
 | `VESPA_CONFIG_PORT` | `19072` | Config server host port (maps to container `:19071`; used by `make migrate-vespa`) |
-| `COLLECTION_NAME` | `exampledocs` | Vespa schema collection; must match `src/vespa_app/migrations/` |
+| `COLLECTION_NAME` | `exampledocs` | Vespa schema collection; must match `src/search_app/migrations/` |
 | `WORKSPACE_ROOT` | `.` | Root for Bruno output: `{WORKSPACE_ROOT}/vespa/bruno/vespa/` |
 
 Optional overrides (rare; full URL wins over port):
 
 | Variable | Role |
 |----------|------|
-| `VESPA_ENDPOINT` | Query/document URL for `VespaClientConfig` and `make bruno` (else `vespa_app.vespa_endpoint()` builds from `VESPA_QUERY_PORT`) |
+| `VESPA_ENDPOINT` | Query/document URL for `VespaClientConfig` and `make bruno` (else `search_app.vespa_endpoint()` builds from `VESPA_QUERY_PORT`) |
 | `VESPA_CONFIG_URL` | Config server URL for `make verify-vespa` / `migrate-vespa` (else `http://localhost:{VESPA_CONFIG_PORT}` in Makefile) |
 
 Port defaults are hardcoded (`18080` / `19072`) but can be overridden via `VESPA_QUERY_PORT` / `VESPA_CONFIG_PORT` in `.env` or by editing `docker-compose.yaml`.
 
 ```python
-from vespa_app import app, vespa_endpoint
-from mistralai.search.toolkit.plugins.vespa import VespaClientConfig
+from search_app import get_index
 
-index = app.get_search_index(
-    VespaClientConfig(endpoint=vespa_endpoint()),
-    collection_name=os.environ["COLLECTION_NAME"],
-)
+# Builds VespaClientConfig(endpoint=vespa_endpoint()) internally.
+index = get_index(os.environ["COLLECTION_NAME"])
 ```
 
 ### Make targets (local Vespa workflow)
@@ -151,6 +158,34 @@ index = app.get_search_index(
 | `make generate-vespa-lock` | Optional `vespa.lock` snapshot |
 
 Port mismatch (compose host ports ≠ `.env` ports) causes ingest/search network errors — keep all three aligned.
+{%- else -%}
+### Postgres (search-starter-app `.env`)
+
+| Variable | Default | Role |
+|----------|---------|------|
+| `POSTGRES_DSN` | `postgresql://postgres:postgres@localhost:5432/postgres` | Connection string for the pgvector database (`docker-compose` publishes `:5432`) |
+| `COLLECTION_NAME` | `exampledocs` | Table backing the collection; created by `make create-schema` and declared in `src/search_app/__init__.py` |
+
+```python
+from search_app import get_index
+
+# Builds PostgresConnectionConfig(dsn=POSTGRES_DSN) internally.
+index = get_index(os.environ["COLLECTION_NAME"])
+```
+
+### Make targets (local Postgres workflow)
+
+| Target | Purpose |
+|--------|---------|
+| `make setup-postgres` | `docker compose up` (pgvector) + `make create-schema` |
+| `make create-schema` | `python -m entrypoints.postgres_create_schema` (`CREATE EXTENSION vector` + create table) |
+| `make start-postgres` / `make stop-postgres` | Start/stop the container without touching data |
+| `make reset-postgres` | Stop container and remove the `postgres-data` volume |
+| `make ingest path=...` | `python -m entrypoints.ingest` (file or directory) |
+| `make search query="..."` | `python -m entrypoints.search` (dense top-k) |
+
+The DSN in `.env` must match the port published by `docker-compose.yaml` (default `5432`).
+{%- endif %}
 
 ## Dev workspace (monorepo only)
 

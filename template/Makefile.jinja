@@ -1,3 +1,4 @@
+{% if backend == 'vespa' -%}
 .PHONY: installdeps install-workflows setup-vespa start-vespa stop-vespa reset-vespa migrate-vespa verify-vespa ingest search bruno generate-vespa-lock start-examples execute-ingestion
 
 ifneq (,$(wildcard .env))
@@ -38,7 +39,7 @@ reset-vespa:
 	@echo "Vespa stopped and project volume removed. Run: make setup-vespa"
 
 migrate-vespa: verify-vespa
-	uv run mistral-vespa migrate --app-dir src/vespa_app \
+	uv run mistral-vespa migrate --app-dir src/search_app \
 		--config-server $(VESPA_CONFIG_URL) \
 		--query-port $(VESPA_QUERY_PORT)
 
@@ -56,15 +57,58 @@ search:
 ## Generate Bruno API files under vespa/bruno/vespa/ (requires WORKSPACE_ROOT in .env)
 bruno:
 	uv run mistral-vespa bruno \
-		--app-dir src/vespa_app \
+		--app-dir src/search_app \
 		--query-url $(VESPA_ENDPOINT) \
 		--document-url $(VESPA_ENDPOINT)
 
 ## Optional: write a vespa.lock snapshot for inspection or CI
 generate-vespa-lock:
 	uv run mistral-vespa generate \
-		--app-dir src/vespa_app \
+		--app-dir src/search_app \
 		--path ./vespa.lock
+{%- else -%}
+.PHONY: installdeps install-workflows setup-postgres start-postgres stop-postgres reset-postgres create-schema ingest search start-examples execute-ingestion
+
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
+
+POSTGRES_CONTAINER := {{ _copier_conf.dst_path.name }}-postgres
+
+## Install dependencies
+installdeps:
+	uv sync
+
+## Start Postgres and create the pgvector schema
+setup-postgres: start-postgres create-schema
+
+start-postgres:
+	docker compose up -d --wait postgres
+
+stop-postgres:
+	docker compose stop postgres
+
+## Stop Postgres and remove this project's data volume (wipes indexed documents; run `make setup-postgres` to start fresh)
+reset-postgres:
+	docker compose down -v --remove-orphans
+	@echo "Postgres stopped and project volume removed. Run: make setup-postgres"
+
+## Create the pgvector extension and collection table (Postgres analogue of migrate-vespa)
+create-schema:
+	uv run python -m entrypoints.postgres_create_schema
+
+## Ingest a file or directory (Search Toolkit Pipeline)
+## Usage: make ingest path=sample_data/hello.txt
+##        make ingest path=sample_data
+ingest:
+	uv run python -m entrypoints.ingest $(path)
+
+## Search the indexed collection (Search Toolkit QueryEngine)
+## Usage: make search query="hello world" [top_k=5]
+search:
+	uv run python -m entrypoints.search "$(query)" $(if $(top_k),--top-k $(top_k),)
+{%- endif %}
 
 ## Install optional workflows dependency (required for examples/workflows/)
 install-workflows:

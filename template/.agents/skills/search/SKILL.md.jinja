@@ -3,18 +3,20 @@ name: mistralai-search-toolkit
 description: >-
   Build ingestion and retrieval pipelines with mistralai-search-toolkit (PyPI).
   Covers Document/DocumentChunk models, Pipeline, QueryEngine, embedders,
-  retrievers, rerankers, context propagation, and Vespa/S3/GCS/Azure plugins.
+  retrievers, rerankers, context propagation, and Vespa/Postgres/S3/GCS/Azure plugins.
   Use when working with mistralai-search-toolkit, mistralai.search.toolkit,
   search toolkit SDK, IR pipelines, document ingestion, vector/keyword search,
-  search-starter-app, local Vespa via docker compose, or migrating from ragnarok.
+  search-starter-app, local Vespa or Postgres via docker compose, or migrating from ragnarok.
 ---
 
 # Mistral Search Toolkit SDK
 
 Modular, backend-agnostic Python framework for IR: ingest → chunk → embed → index → retrieve → rerank.
 
-**Namespace:** `mistralai.search.toolkit`  
+**Namespace:** `mistralai.search.toolkit`
 **PyPI:** `mistralai-search-toolkit` (Python ≥3.12)
+
+This project was generated with the **{{ 'Vespa' if backend == 'vespa' else 'Postgres (pgvector)' }}** backend.
 
 ## Install
 
@@ -23,7 +25,11 @@ Use **uv** for dependencies and running scripts — not `pip`.
 ```bash
 # In a project (preferred)
 uv add mistralai-search-toolkit
+{% if backend == 'vespa' -%}
 uv add "mistralai-search-toolkit[vespa]"
+{%- else -%}
+uv add "mistralai-search-toolkit[postgres]"
+{%- endif %}
 uv add "mistralai-search-toolkit[all]"   # all optional integrations
 
 # One-off script without adding to pyproject
@@ -35,6 +41,7 @@ Monorepo / workspace: `cd search && uv sync --all-packages`, then `uv run python
 | Need | Extra / plugin package |
 |------|------------------------|
 | Vespa backend | `[vespa]` → `mistralai-search-toolkit-plugins-vespa` |
+| Postgres backend | `[postgres]` → `mistralai-search-toolkit-plugins-postgres` |
 | S3 loader/storage | `mistralai-search-toolkit-storage-s3` |
 | GCS | `[storage-gcs]` |
 | Azure | `[storage-azure]` |
@@ -50,10 +57,11 @@ This Copier template ships the skill at **`.agents/skills/search/`** (`SKILL.md`
 
 **Layout:**
 
+{% if backend == 'vespa' -%}
 ```text
 src/entrypoints/ingest.py   # Pipeline ingest (plain-text vs OCR by suffix)
 src/entrypoints/search.py   # QueryEngine + VectorRetriever
-src/vespa_app/              # VespaApp + schema migrations
+src/search_app/             # VespaApp + schema migrations
 sample_data/                # Example documents
 ```
 
@@ -71,25 +79,63 @@ make reset-vespa            # wipe data volume; then setup-vespa again
 
 **Environment (`.env`):** `VESPA_QUERY_PORT` and `VESPA_CONFIG_PORT` are the source of truth (defaults `18080` / `19072`). URLs are `http://localhost:{port}` unless `VESPA_ENDPOINT` / `VESPA_CONFIG_URL` override. Also: `MISTRAL_API_KEY`, `COLLECTION_NAME`, `WORKSPACE_ROOT=.` (Bruno output path). See [reference.md](reference.md) for the full table and Make targets.
 
-**Vespa client in entrypoints:**
+**Store index in entrypoints:** all three call sites (`ingest.py`, `search.py`, workflow activity) build the index through one neutral seam:
 
 ```python
 import os
 from dotenv import load_dotenv
-from mistralai.search.toolkit.plugins.vespa import VespaClientConfig
-from vespa_app import app, vespa_endpoint
+from search_app import get_index
 
 load_dotenv(override=True)
 collection_name = os.environ.get("COLLECTION_NAME", "exampledocs")
-index = app.get_search_index(
-    VespaClientConfig(endpoint=vespa_endpoint()),
-    collection_name=collection_name,
-)
+index = get_index(collection_name)   # builds VespaClientConfig internally
 ```
 
-`ingest.py` uses two shared `Pipeline` instances: `PlainTextExtractor` for `.txt`/`.md`/… and `MistralOCRExtractor` for other files (e.g. PDFs). Prefer extending those entrypoints or `src/vespa_app/migrations/` rather than ad-hoc scripts.
+`search.py` also accepts `get_index(collection_name, query_profile=...)` to rank with a named Vespa query profile (default `hybrid-search`).
+
+`ingest.py` uses two shared `Pipeline` instances: `PlainTextExtractor` for `.txt`/`.md`/… and `MistralOCRExtractor` for other files (e.g. PDFs). Prefer extending those entrypoints or `src/search_app/migrations/` rather than ad-hoc scripts.
 
 **Port alignment:** `docker-compose.yaml` host ports, `.env` ports, and Makefile defaults must match — mismatches cause network errors on ingest/search.
+{%- else -%}
+```text
+src/entrypoints/ingest.py          # Pipeline ingest (plain-text vs OCR by suffix)
+src/entrypoints/search.py          # QueryEngine + VectorRetriever
+src/entrypoints/postgres_create_schema.py  # CREATE EXTENSION vector + create table
+src/search_app/                    # PostgresApp (declares CollectionSchema)
+sample_data/                       # Example documents
+```
+
+**Local Postgres (Docker):**
+
+```bash
+uv sync
+# Set MISTRAL_API_KEY in .env (from copier copy or edit manually)
+make setup-postgres        # start pgvector container + create schema
+make ingest path=sample_data/hello.txt
+make search query="hello world"
+make reset-postgres          # wipe data volume; then setup-postgres again
+```
+
+**Environment (`.env`):** `POSTGRES_DSN` is the connection string (defaults to the local dev container `postgresql://postgres:postgres@localhost:5432/postgres`). Also: `MISTRAL_API_KEY`, `COLLECTION_NAME`. See [reference.md](reference.md) for the full table and Make targets.
+
+**Store index in entrypoints:** all three call sites (`ingest.py`, `search.py`, workflow activity) build the index through one neutral seam:
+
+```python
+import os
+from dotenv import load_dotenv
+from search_app import get_index
+
+load_dotenv(override=True)
+collection_name = os.environ.get("COLLECTION_NAME", "exampledocs")
+index = get_index(collection_name)   # builds PostgresConnectionConfig internally
+```
+
+Postgres search is **dense top-k only** — there is no Vespa-style query profile, so `get_index` takes no `query_profile=` argument.
+
+`ingest.py` uses two shared `Pipeline` instances: `PlainTextExtractor` for `.txt`/`.md`/… and `MistralOCRExtractor` for other files (e.g. PDFs). Prefer extending those entrypoints or the `CollectionSchema` in `src/search_app/__init__.py` rather than ad-hoc scripts.
+
+**Schema:** `make create-schema` (run for you by `make setup-postgres`) creates the `vector` extension and the table backing `COLLECTION_NAME`. It is idempotent — safe to rerun.
+{%- endif %}
 
 ## Architecture
 
@@ -99,7 +145,7 @@ Retrieval:  QueryEngine → [LLMQueryRewriter] → [LLMQueryExtension] → Retri
 ```
 
 - **Core** defines abstractions (`VectorStoreIndex`, `KeywordStoreIndex`, `Pipeline`, `QueryEngine`).
-- **Backends** (Vespa, cloud loaders) live in separate plugin packages.
+- **Backends** (Vespa, Postgres, cloud loaders) live in separate plugin packages.
 - **Mistral APIs** use the public SDK: `from mistralai.client import Mistral`.
 
 ## Non-negotiable conventions
@@ -143,7 +189,7 @@ from mistralai.search.toolkit.ingestion.text_splitters import (
     MarkdownTextSplitterConfig,
 )
 
-# vector_store: VectorStoreIndex from a plugin (e.g. VespaSearchIndex)
+# vector_store: VectorStoreIndex from a plugin (e.g. get_index(collection_name))
 
 async def ingest(pdf_path: Path, vector_store, api_key: str) -> int:
     client = Mistral(api_key=api_key)
@@ -186,7 +232,11 @@ async def search(query: str, vector_store, api_key: str, top_k: int = 10):
     )
 ```
 
+{% if backend == 'vespa' -%}
 **Hybrid / keyword:** add `KeywordRetriever` alongside `VectorRetriever`; fuse with `RRFRanker` or `GroupedRanker`.
+{%- else -%}
+**Dense-only:** the Postgres backend serves vector (`VectorRetriever`) queries. There is no BM25/keyword index — use a Vespa-backed project for hybrid retrieval.
+{%- endif %}
 
 **LLM features:** configure at init, not per `search()` call:
 - `LLMQueryRewriter` + `MistralChat` (`mistralai.search.toolkit.llm`)
@@ -195,26 +245,62 @@ async def search(query: str, vector_store, api_key: str, top_k: int = 10):
 
 **Caching:** wrap with `CachedQueryEngine` (`retrieval.cache`).
 
+{% if backend == 'vespa' -%}
 ## Vespa plugin (typical production path)
 
 ```python
 from pathlib import Path
 from mistralai.search.toolkit.plugins.vespa import VespaApp, VespaClientConfig
 
-app = VespaApp(Path("src/vespa_app"))
+app = VespaApp(Path("src/search_app"))
 index = app.get_search_index(
     VespaClientConfig(endpoint="http://localhost:18080"),
     collection_name="exampledocs",
 )
 ```
 
-Index creation is backend-specific (not on `StoreIndex` base). In this template, schema lives under `src/vespa_app/migrations/` and is applied with:
+Index creation is backend-specific (not on `StoreIndex` base). In this template, schema lives under `src/search_app/migrations/` and is applied with:
 
 ```bash
 make migrate-vespa   # mistral-vespa migrate --config-server ... --query-port ...
 ```
 
 CLI also supports `mistral-vespa bruno` and `mistral-vespa generate` (see `make bruno`, `make generate-vespa-lock`).
+{%- else -%}
+## Postgres plugin (typical production path)
+
+```python
+from mistralai.search.toolkit.document import Document
+from mistralai.search.toolkit.plugins.postgres import (
+    CollectionSchema,
+    PostgresApp,
+    PostgresConnectionConfig,
+)
+
+app = PostgresApp(
+    [
+        CollectionSchema(
+            collection_name="exampledocs",
+            document_type=Document,
+            dim=128,                     # match the embedder (MistralEmbedder → 128-dim)
+            distance_metric="cosine",
+        )
+    ]
+)
+index = app.get_search_index(
+    PostgresConnectionConfig(dsn="postgresql://postgres:postgres@localhost:5432/postgres"),
+    collection_name="exampledocs",
+)
+```
+
+Index creation is backend-specific (not on `StoreIndex` base). The Postgres analogue of `mistral-vespa migrate` is `await app.create_schema(config, collection_name=...)` (`CREATE EXTENSION vector` + `create_all`). This template wraps it in `src/entrypoints/postgres_create_schema.py`:
+
+```bash
+make create-schema   # python -m entrypoints.postgres_create_schema
+```
+
+There is no bruno/generate CLI and no query profiles — Postgres retrieval is dense top-k.
+{%- endif %}
 
 ## Custom context example
 
@@ -243,14 +329,21 @@ Subclasses: `VectorStoreIndex`, `KeywordStoreIndex`. Exceptions: `IndexingError`
 
 | Goal | Start here |
 |------|------------|
+{% if backend == 'vespa' -%}
 | Run this template end-to-end | `make setup-vespa` → `make ingest` → `make search` |
-| Change Vespa ports | Copier `vespa_query_port` / `vespa_config_port`, or `.env` + `docker-compose.yaml` |
+| Change Vespa ports | `.env` `VESPA_QUERY_PORT` / `VESPA_CONFIG_PORT` + `docker-compose.yaml` |
+| Vespa schema / hybrid profile | `src/search_app/migrations/`, then `make migrate-vespa` |
+| Bruno API collection | `make bruno` (`WORKSPACE_ROOT=.` in `.env`) |
+| BM25 / hybrid | `KeywordRetriever` + optional `VectorRetriever` + `RRFRanker` |
+{%- else -%}
+| Run this template end-to-end | `make setup-postgres` → `make ingest` → `make search` |
+| Recreate the schema | `make create-schema` (or `make reset-postgres` to wipe first) |
+| Change the connection | `.env` `POSTGRES_DSN` + `docker-compose.yaml` |
+| Adjust the vector schema | `CollectionSchema` in `src/search_app/__init__.py` (dim, distance metric, HNSW params) |
+{%- endif %}
 | Index local files | `make ingest` or `Pipeline` + `FilesystemFileLoader` in `entrypoints/ingest.py` |
 | Index from S3/GCS/Azure | storage plugin loader + same `Pipeline` |
 | Semantic search | `make search` or `QueryEngine` + `VectorRetriever` in `entrypoints/search.py` |
-| Vespa schema / hybrid profile | `src/vespa_app/migrations/`, then `make migrate-vespa` |
-| Bruno API collection | `make bruno` (`WORKSPACE_ROOT=.` in `.env`) |
-| BM25 / hybrid | `KeywordRetriever` + optional `VectorRetriever` + `RRFRanker` |
 | Better ranking | `LLMReRanker` or `GroupedRanker` |
 | Query understanding | `LLMQueryRewriter` / `LLMQueryExtension` |
 | Multi-tenant headers | Subclass `RetrievalContext` + `MistralClientOptions` |

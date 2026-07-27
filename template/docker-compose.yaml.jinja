@@ -1,3 +1,4 @@
+{% if backend == 'vespa' -%}
 # Local Vespa for development.
 # Query API: http://localhost:${VESPA_QUERY_PORT:-18080}  (.env VESPA_QUERY_PORT)
 # Config server: http://localhost:${VESPA_CONFIG_PORT:-19072}  (.env VESPA_CONFIG_PORT)
@@ -30,3 +31,30 @@ services:
 
 volumes:
   vespa-data:
+{%- else -%}
+# Local Postgres + pgvector for development.
+# Connection: postgresql://postgres:postgres@localhost:5432/postgres  (.env POSTGRES_DSN)
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: {{ _copier_conf.dst_path.name }}-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    # PGDATA on postgres:18 is /var/lib/postgresql/18/docker; mount the parent
+    # so data persists across container restarts regardless of major-version bumps.
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+{%- endif %}

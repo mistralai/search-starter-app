@@ -1,4 +1,4 @@
-"""Ingest a local document into Vespa.
+"""Ingest a local document into the configured search backend.
 
 Usage:
     python -m entrypoints.ingest <file_path>
@@ -22,8 +22,7 @@ from mistralai.search.toolkit.ingestion.text_splitters import (
     MarkdownTextSplitter,
     MarkdownTextSplitterConfig,
 )
-from mistralai.search.toolkit.plugins.vespa import VespaClientConfig
-from vespa_app import app, vespa_endpoint
+from search_app import get_index
 
 load_dotenv(override=True)
 
@@ -42,7 +41,9 @@ def _collect_documents(path: Path) -> list[Path]:
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description="Ingest a document into Vespa.")
+    parser = argparse.ArgumentParser(
+        description="Ingest a document into the configured search backend."
+    )
     parser.add_argument("file_path", help="Path to the file or directory to ingest")
     args = parser.parse_args()
 
@@ -65,10 +66,7 @@ async def main() -> None:
         MarkdownTextSplitterConfig(chunk_size=4096, chunk_overlap=50)
     )
     embedder = MistralEmbedder(client=mistral_client)
-    vector_store = app.get_search_index(
-        VespaClientConfig(endpoint=vespa_endpoint()),
-        collection_name=collection_name,
-    )
+    vector_store = get_index(collection_name)
 
     plain_text_pipeline = Pipeline(
         loader=loader,
