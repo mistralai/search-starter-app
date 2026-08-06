@@ -35,6 +35,10 @@ _integration-test-body:
 	$(MAKE) _test-ingest-help
 	$(MAKE) _test-search-help
 	$(MAKE) _test-wheel-contents
+ifeq ($(BACKEND),postgres)
+	$(MAKE) _test-alembic-chain
+	$(MAKE) _test-schema-checks
+endif
 	@echo ""
 	@echo "All integration tests passed (backend=$(BACKEND))."
 
@@ -61,6 +65,17 @@ _test-search-help:
 	cd $(GENERATED_PROJECT) && uv run python -m entrypoints.search --help > /dev/null 2>&1 \
 		&& echo "OK: search --help works" \
 		|| (echo "FAIL: search --help failed" && exit 1)
+
+_test-alembic-chain:
+	@echo "--- test: alembic resolves the chain (env.py imports, one head)"
+	@cd $(GENERATED_PROJECT) && uv run alembic heads 2>&1 | grep -q "0001 (head)" \
+		&& echo "OK: alembic head is 0001" \
+		|| (echo "FAIL: alembic could not resolve the chain" && cd $(GENERATED_PROJECT) && uv run alembic heads && exit 1)
+
+_test-schema-checks:
+	@echo "--- test: the generated project's own schema checks pass"
+	@echo "    (test_structure needs no database; test_migrations skips without one)"
+	cd $(GENERATED_PROJECT) && uv run pytest tests/ -q
 
 _test-wheel-contents:
 	@echo "--- test: built wheel ships entrypoints and search_app"

@@ -21,6 +21,12 @@ _exclude:
   # it can't carry a backend token). Excluding only the *vespa* file inside it would
   # leave an empty migrations/ dir on Postgres, so drop the whole directory here.
   - "{% if backend == 'postgres' %}migrations{% endif %}"
+  # Same for the Postgres-only paths whose names Alembic and pytest fix for us:
+  # `alembic/` is where `script_location` points, and `tests/` only holds the schema
+  # checks that come with the Alembic chain. Dropped whole on Vespa.
+  - "{% if backend == 'vespa' %}alembic{% endif %}"
+  - "{% if backend == 'vespa' %}alembic.ini{% endif %}"
+  - "{% if backend == 'vespa' %}tests{% endif %}"
 
 backend:
   type: str
@@ -40,6 +46,16 @@ collection_name:
   type: str
   default: "exampledocs"
   help: "Collection name (must match the schema created for the chosen backend)"
+  # On Postgres the name is baked into the table and into every index derived from it, and
+  # Postgres truncates identifiers at 63 bytes rather than erroring -- so the ceiling here is
+  # 63 minus the longest generated suffix (`_chunks_hnsw_m16_efc64_hv_cos`). Catching it now
+  # beats a confusing failure the first time the project is imported.
+  validator: >-
+    {% if not (collection_name | regex_search('^[a-z][a-z0-9_]*$')) %}
+    Must start with a letter and contain only lowercase letters, digits and underscores.
+    {% elif backend == 'postgres' and collection_name | length > 34 %}
+    Too long for Postgres: at most 34 characters, because index names derive from it.
+    {% endif %}
 
 postgres_plugin_path:
   type: str

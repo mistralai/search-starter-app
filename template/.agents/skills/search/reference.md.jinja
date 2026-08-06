@@ -25,7 +25,7 @@
 {% if backend == 'vespa' -%}
 | `plugins.vespa` | `VespaSearchIndex`, `VespaClientConfig`, `VespaApp`, `VespaAppDefinition`, evaluators, migration |
 {%- else -%}
-| `plugins.postgres` | `PostgresStoreIndex`, `PostgresApp`, `CollectionSchema`, `PostgresConnectionConfig`, `create_engine`, `PostgresColumn`, `build_table` |
+| `plugins.postgres` | `PostgresStoreIndex`, `PostgresApp`, `PostgresCollectionSchema`, `PostgresConnectionConfig`, `create_engine`, `PostgresColumn`, `MissingVectorExtensionError` |
 {%- endif %}
 
 ## PyPI optional extras (`mistralai-search-toolkit`)
@@ -163,8 +163,8 @@ Port mismatch (compose host ports ≠ `.env` ports) causes ingest/search network
 
 | Variable | Default | Role |
 |----------|---------|------|
-| `POSTGRES_DSN` | `postgresql://postgres:postgres@localhost:5432/postgres` | Connection string for the pgvector database (`docker-compose` publishes `:5432`) |
-| `COLLECTION_NAME` | `exampledocs` | Table backing the collection; created by `make create-schema` and declared in `src/search_app/__init__.py` |
+| `POSTGRES_DSN` | `postgresql://pg:1234@localhost:5432/postgres` | Connection string for the pgvector database (`docker-compose` publishes `:5432`); also read by `alembic/env.py` |
+| `COLLECTION_NAME` | `exampledocs` | Collection the entrypoints query. On Postgres the declared name is fixed at generation time and the table is created by `make migrate`, so overriding this asks for a collection the app does not declare |
 
 ```python
 from search_app import get_index
@@ -177,8 +177,10 @@ index = get_index(os.environ["COLLECTION_NAME"])
 
 | Target | Purpose |
 |--------|---------|
-| `make setup-postgres` | `docker compose up` (pgvector) + `make create-schema` |
-| `make create-schema` | `python -m entrypoints.postgres_create_schema` (`CREATE EXTENSION vector` + create table) |
+| `make setup-postgres` | `docker compose up` (pgvector) + `make migrate` |
+| `make migrate` | `alembic upgrade head` — applies the chain in `alembic/versions/` |
+| `make structure` | Re-render `alembic/structure.sql` from the declaration (no database needed) |
+| `make test` | Schema checks: snapshot is current, and the chain builds what the app expects |
 | `make start-postgres` / `make stop-postgres` | Start/stop the container without touching data |
 | `make reset-postgres` | Stop container and remove the `postgres-data` volume |
 | `make ingest path=...` | `python -m entrypoints.ingest` (file or directory) |

@@ -138,19 +138,19 @@ make installdeps
 `MISTRAL_API_KEY` is set in `.env` from the value you entered during `copier copy` (or edit `.env` later). Project name matches the folder you passed to `copier copy` (this directory).
 
 The Postgres connection string lives in `.env` as `POSTGRES_DSN` (defaults to the
-local dev container: `postgresql://postgres:postgres@localhost:5432/postgres`).
+local dev container: `postgresql://pg:1234@localhost:5432/postgres`).
 
 ## Commands
 
-### Start Postgres and create the schema
+### Start Postgres and migrate the schema
 
 ```bash
 make setup-postgres
 ```
 
 This starts the `pgvector/pgvector:pg18` container (port **5432**) and then runs
-`make create-schema`, which creates the `vector` extension and the table backing
-`COLLECTION_NAME` (idempotent — safe to rerun).
+`make migrate` (`alembic upgrade head`), which applies the chain in `alembic/versions/`.
+Safe to rerun: Alembic records what it has already applied.
 
 To wipe local Postgres data and start fresh:
 
@@ -158,6 +158,31 @@ To wipe local Postgres data and start fresh:
 make reset-postgres
 make setup-postgres
 ```
+
+### Changing the schema
+
+The collection is stated three times, on purpose, each pinned against the others:
+
+| Where | What it is | Checked by |
+|---|---|---|
+| `POSTGRES_COLLECTION` in `src/search_app/__init__.py` | the declaration this app binds to | — |
+| `alembic/versions/` | the chain that builds it, as static DDL | `alembic check` (`tests/test_migrations.py`) |
+| `alembic/structure.sql` | a checked-in render of the declaration, so schema changes show up in review | `tests/test_structure.py` |
+
+So to add a field or retune the index:
+
+```bash
+# 1. edit the declaration in src/search_app/__init__.py
+make structure                                        # 2. re-render the snapshot
+uv run alembic revision --autogenerate -m "add field" # 3. write the matching revision
+make migrate                                          # 4. apply it
+make test                                             # all three now agree
+```
+
+Revisions are deliberately static DDL rather than a call back into the toolkit: anything that
+resolved the table's shape at migration time would let a toolkit upgrade change what an old
+revision does. The one exception is `op.retune_vector_index`, for rebuilding the HNSW index
+`CONCURRENTLY` — a rollout choice autogenerate cannot express.
 
 ### Ingest documents
 
@@ -220,10 +245,12 @@ src/
 ├── entrypoints/
 │   ├── ingest.py          # mistralai.search.toolkit.ingestion.pipelines.Pipeline
 │   ├── mcp_server.py      # MCP server (search + navigation + ingest tools)
-│   ├── search.py          # mistralai.search.toolkit.retrieval.QueryEngine
-│   └── postgres_create_schema.py   # CREATE EXTENSION vector + create table
+│   └── search.py          # mistralai.search.toolkit.retrieval.QueryEngine
 └── search_app/
-    └── __init__.py        # PostgresApp — mistralai.search.toolkit.plugins.postgres
+    ├── __init__.py        # PostgresApp + the collection declaration
+    └── postgres_structure.py   # renders alembic/structure.sql from that declaration
+alembic/                   # migration chain (make migrate); structure.sql snapshot
+tests/                     # schema checks: chain vs declaration, structure.sql freshness
 .mcp.json                  # MCP server config (auto-loaded by Claude Code)
 .vibe/config.toml          # MCP server config (auto-loaded by Vibe CLI)
 sample_data/               # Sample documents

@@ -100,8 +100,9 @@ index = get_index(collection_name)   # builds VespaClientConfig internally
 ```text
 src/entrypoints/ingest.py          # Pipeline ingest (plain-text vs OCR by suffix)
 src/entrypoints/search.py          # QueryEngine + VectorRetriever
-src/entrypoints/postgres_create_schema.py  # CREATE EXTENSION vector + create table
-src/search_app/                    # PostgresApp (declares CollectionSchema)
+src/search_app/                    # PostgresApp (declares PostgresCollectionSchema)
+alembic/                           # migration chain + structure.sql snapshot
+tests/                             # schema checks (chain vs declaration, snapshot freshness)
 sample_data/                       # Example documents
 ```
 
@@ -110,13 +111,13 @@ sample_data/                       # Example documents
 ```bash
 uv sync
 # Set MISTRAL_API_KEY in .env (from copier copy or edit manually)
-make setup-postgres        # start pgvector container + create schema
+make setup-postgres        # start pgvector container + alembic upgrade head
 make ingest path=sample_data/hello.txt
 make search query="hello world"
 make reset-postgres          # wipe data volume; then setup-postgres again
 ```
 
-**Environment (`.env`):** `POSTGRES_DSN` is the connection string (defaults to the local dev container `postgresql://postgres:postgres@localhost:5432/postgres`). Also: `MISTRAL_API_KEY`, `COLLECTION_NAME`. See [reference.md](reference.md) for the full table and Make targets.
+**Environment (`.env`):** `POSTGRES_DSN` is the connection string (defaults to the local dev container `postgresql://pg:1234@localhost:5432/postgres`; `alembic/env.py` reads it too). Also: `MISTRAL_API_KEY`, `COLLECTION_NAME`. See [reference.md](reference.md) for the full table and Make targets.
 
 **Store index in entrypoints:** all three call sites (`ingest.py`, `search.py`, workflow activity) build the index through one neutral seam:
 
@@ -132,9 +133,11 @@ index = get_index(collection_name)   # builds PostgresConnectionConfig internall
 
 Postgres search is **dense top-k only** — there is no Vespa-style query profile, so `get_index` takes no `query_profile=` argument.
 
-`ingest.py` uses two shared `Pipeline` instances: `PlainTextExtractor` for `.txt`/`.md`/… and `MistralOCRExtractor` for other files (e.g. PDFs). Prefer extending those entrypoints or the `CollectionSchema` in `src/search_app/__init__.py` rather than ad-hoc scripts.
+`ingest.py` uses two shared `Pipeline` instances: `PlainTextExtractor` for `.txt`/`.md`/… and `MistralOCRExtractor` for other files (e.g. PDFs). Prefer extending those entrypoints or the `PostgresCollectionSchema` in `src/search_app/__init__.py` rather than ad-hoc scripts.
 
-**Schema:** `make create-schema` (run for you by `make setup-postgres`) creates the `vector` extension and the table backing `COLLECTION_NAME`. It is idempotent — safe to rerun.
+**Schema:** owned by the Alembic chain in `alembic/`, applied by `make migrate` (run for you by `make setup-postgres`). Changing it is a three-step loop, and all three are checked by `make test`: edit the declaration in `src/search_app/__init__.py`, run `make structure` to re-render `alembic/structure.sql`, then `uv run alembic revision --autogenerate -m "..."` to write the matching revision. Revisions are static DDL, never a call back into the toolkit — the exception is `op.retune_vector_index`, for an HNSW rebuild that must not block writes.
+
+The declared collection name is fixed when the project is generated, because the chain builds a table of exactly that name; `COLLECTION_NAME` in `.env` selects which collection the entrypoints ask for, and asking for an undeclared one fails immediately.
 {%- endif %}
 
 ## Architecture
@@ -272,14 +275,14 @@ CLI also supports `mistral-vespa bruno` and `mistral-vespa generate` (see `make 
 ```python
 from mistralai.search.toolkit.document import Document
 from mistralai.search.toolkit.plugins.postgres import (
-    CollectionSchema,
     PostgresApp,
+    PostgresCollectionSchema,
     PostgresConnectionConfig,
 )
 
 app = PostgresApp(
     [
-        CollectionSchema(
+        PostgresCollectionSchema(
             collection_name="exampledocs",
             document_type=Document,
             dim=128,                     # match the embedder (MistralEmbedder → 128-dim)
@@ -288,16 +291,18 @@ app = PostgresApp(
     ]
 )
 index = app.get_search_index(
-    PostgresConnectionConfig(dsn="postgresql://postgres:postgres@localhost:5432/postgres"),
+    PostgresConnectionConfig(dsn="postgresql://pg:1234@localhost:5432/postgres"),
     collection_name="exampledocs",
 )
 ```
 
-Index creation is backend-specific (not on `StoreIndex` base). The Postgres analogue of `mistral-vespa migrate` is `await app.create_schema(config, collection_name=...)` (`CREATE EXTENSION vector` + `create_all`). This template wraps it in `src/entrypoints/postgres_create_schema.py`:
+Index creation is backend-specific (not on the `StoreIndex` base). `await app.create_schema(config, collection_name=...)` is the minimal path for a deployment with no migration chain. This template has one, so the table comes from Alembic instead — one ordering for the search table and any tables the project grows later:
 
 ```bash
-make create-schema   # python -m entrypoints.postgres_create_schema
+make migrate   # alembic upgrade head
 ```
+
+`alembic/env.py` hands the declaration to Alembic as `target_metadata`, which is what lets `alembic revision --autogenerate` write the DDL and `alembic check` report drift between the chain and the app.
 
 There is no bruno/generate CLI and no query profiles — Postgres retrieval is dense top-k.
 {%- endif %}
@@ -337,9 +342,9 @@ Subclasses: `VectorStoreIndex`, `KeywordStoreIndex`. Exceptions: `IndexingError`
 | BM25 / hybrid | `KeywordRetriever` + optional `VectorRetriever` + `RRFRanker` |
 {%- else -%}
 | Run this template end-to-end | `make setup-postgres` → `make ingest` → `make search` |
-| Recreate the schema | `make create-schema` (or `make reset-postgres` to wipe first) |
+| Apply schema changes | `make migrate` (or `make reset-postgres` to wipe first) |
 | Change the connection | `.env` `POSTGRES_DSN` + `docker-compose.yaml` |
-| Adjust the vector schema | `CollectionSchema` in `src/search_app/__init__.py` (dim, distance metric, HNSW params) |
+| Adjust the vector schema | `PostgresCollectionSchema` in `src/search_app/__init__.py` (dim, distance metric, HNSW params), then `make structure` + a new revision |
 {%- endif %}
 | Index local files | `make ingest` or `Pipeline` + `FilesystemFileLoader` in `entrypoints/ingest.py` |
 | Index from S3/GCS/Azure | storage plugin loader + same `Pipeline` |

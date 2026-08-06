@@ -23,6 +23,12 @@ dependencies = [
     # redirects a package that is already a declared dependency. Until the plugin
     # is published this resolves from the local checkout in [tool.uv.sources].
     "mistralai-search-toolkit-plugins-postgres",
+    # The collection's table is created by the Alembic chain in alembic/, not by a
+    # create-if-absent call, so that one ordering governs the whole database once this
+    # project grows tables of its own. `make migrate` runs it.
+    "alembic>=1.16",
+    # Alembic drives a sync driver; the store's own runtime path is asyncpg.
+    "psycopg[binary]>=3.2",
 {%- endif %}
     "python-dotenv>=0.9.9",
 ]
@@ -37,6 +43,10 @@ workflows = [
 dev = [
     "ruff>=0.11",
     "mypy>=1.15",
+{%- if backend == 'postgres' %}
+    # `make test` runs the schema checks in tests/.
+    "pytest>=8.0",
+{%- endif %}
 ]
 
 [tool.uv]

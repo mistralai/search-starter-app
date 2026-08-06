@@ -31,33 +31,48 @@ import os
 
 from mistralai.search.toolkit.document import Document
 from mistralai.search.toolkit.plugins.postgres import (
-    CollectionSchema,
     PostgresApp,
+    PostgresCollectionSchema,
     PostgresConnectionConfig,
 )
 
 # Embedding dimension must match the embedder used in the entrypoints.
 # MistralEmbedder defaults to the 128-dimension model.
 _EMBEDDING_DIM = 128
-_COLLECTION_NAME = os.environ.get("COLLECTION_NAME", "{{ collection_name }}")
 
-app = PostgresApp(
-    [
-        CollectionSchema(
-            collection_name=_COLLECTION_NAME,
-            document_type=Document,
-            dim=_EMBEDDING_DIM,
-            distance_metric="cosine",
-        )
-    ]
+# Fixed at generation time rather than read from COLLECTION_NAME, because the Alembic
+# chain in alembic/versions/ builds a table of exactly this name. If the two could drift
+# apart, the store would bind to a table no migration created and fail at query time;
+# as it is, asking for a collection this app does not declare fails immediately with a
+# list of the ones it does. Renaming means a new revision, not a new env var.
+COLLECTION_NAME = "{{ collection_name }}"
+
+# The declaration is the source of truth for the running app; the revisions are the
+# history of how the database got there. `alembic check` (tests/test_migrations.py)
+# is what keeps the two honest -- see alembic/env.py.
+POSTGRES_COLLECTION = PostgresCollectionSchema(
+    collection_name=COLLECTION_NAME,
+    document_type=Document,
+    dim=_EMBEDDING_DIM,
+    distance_metric="cosine",
 )
+
+app = PostgresApp([POSTGRES_COLLECTION])
 
 
 def postgres_dsn() -> str:
-    """Postgres DSN from POSTGRES_DSN (falls back to the local dev default)."""
-    return os.environ.get(
-        "POSTGRES_DSN", "postgresql://postgres:postgres@localhost:5432/postgres"
-    )
+    """Postgres DSN from POSTGRES_DSN (falls back to the local dev container)."""
+    return os.environ.get("POSTGRES_DSN", "postgresql://pg:1234@localhost:5432/postgres")
+
+
+def postgres_migration_url() -> str:
+    """The same database as :func:`postgres_dsn`, spelled for a sync driver.
+
+    Alembic drives a sync engine while the store's runtime path is asyncpg. Deriving one
+    from the other rather than configuring them separately is what stops
+    `alembic upgrade head` and the app from being pointed at different databases.
+    """
+    return postgres_dsn().replace("postgresql://", "postgresql+psycopg://", 1)
 
 
 def _connection_config() -> PostgresConnectionConfig:
@@ -72,7 +87,8 @@ def get_index(collection_name: str):
     )
 
 
-async def create_schema(collection_name: str) -> None:
-    """Create the pgvector extension and table for ``collection_name``."""
-    await app.create_schema(_connection_config(), collection_name=collection_name)
+# There is deliberately no `create_schema` here. `PostgresApp.create_schema` is the
+# minimal path for a deployment with no migration chain; this project has one, so the
+# table is created by `make migrate` (`alembic upgrade head`) and every later schema
+# change goes through the same ordering.
 {%- endif %}
