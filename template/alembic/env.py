@@ -49,6 +49,12 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             include_object=include_object,
+            # `compare_type` is Alembic's default (1.12+), pinned so a change of default cannot
+            # silently stop catching an embedding-dimension change -- the dimension lives only in
+            # the column type, and no index name encodes it. `compare_server_default` is not a
+            # default, and the metadata column carries one.
+            compare_type=True,
+            compare_server_default=True,
         )
         with context.begin_transaction():
             context.run_migrations()
@@ -58,6 +64,8 @@ def run_migrations_online() -> None:
 def run_migrations_offline() -> None:
     context.configure(
         include_object=include_object,
+        compare_type=True,
+        compare_server_default=True,
         url=config.get_main_option("sqlalchemy.url"),
         target_metadata=target_metadata,
         literal_binds=True,
