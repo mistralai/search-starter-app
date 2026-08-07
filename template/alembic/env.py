@@ -28,7 +28,7 @@ from sqlalchemy import MetaData, engine_from_config, pool  # noqa: E402
 
 from alembic import context  # noqa: E402
 from mistralai.search.toolkit.plugins.postgres import alembic_ops  # noqa: E402, F401 - registers the op
-from search_app import POSTGRES_COLLECTION, postgres_migration_url  # noqa: E402
+from search_app import POSTGRES_COLLECTION, include_object, postgres_migration_url  # noqa: E402
 
 config = context.config
 if not config.get_main_option("sqlalchemy.url", None):
@@ -45,7 +45,11 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            include_object=include_object,
+        )
         with context.begin_transaction():
             context.run_migrations()
     connectable.dispose()
@@ -53,6 +57,7 @@ def run_migrations_online() -> None:
 
 def run_migrations_offline() -> None:
     context.configure(
+        include_object=include_object,
         url=config.get_main_option("sqlalchemy.url"),
         target_metadata=target_metadata,
         literal_binds=True,

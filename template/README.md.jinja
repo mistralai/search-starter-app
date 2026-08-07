@@ -184,6 +184,25 @@ resolved the table's shape at migration time would let a toolkit upgrade change 
 revision does. The one exception is `op.retune_vector_index`, for rebuilding the HNSW index
 `CONCURRENTLY` — a rollout choice autogenerate cannot express.
 
+### Changing the schema while the previous release is still serving
+
+The store names its columns explicitly in every statement — it never does `SELECT *` — so it
+ignores database columns it does not declare, and fails on declared columns the database lacks.
+Everything else follows from that one rule: **the database must be a superset of every
+declaration currently running.**
+
+| Change | Releases | Why |
+|---|---|---|
+| Add a field | 1 | Old pods never name the column; keep it nullable or server-defaulted and they write NULL. Migrate before deploying. |
+| Remove a field | 2 | The column must outlive the release that stopped writing it. Release N drops the field from the model and adds `"<table>.<column>"` to `PENDING_DROP`; release N+1 drops the column and the entry. |
+| Retune HNSW (`m`, `ef_construction`) | 1 | Transparent. Postgres picks an index by structure, not name, so the rebuilt index answers the old pods' queries unchanged. |
+| Change the distance metric | 2 | Changes the operator class, so old pods' queries cannot use the new index and fall back to a sequential scan. Release N uses `drop_old=False`; release N+1 drops the old index. |
+| Change the embedding dimension | — | Not migratable in place. Old pods would write vectors of the wrong width into the new column type; this needs a second collection and a cutover. |
+
+`PENDING_DROP` lives in `src/search_app/__init__.py` and is deliberately narrow: it exempts
+only the named columns from `alembic check`, so the retirement window is visible in review and
+cannot quietly become permanent.
+
 ### Ingest documents
 
 Uses two `Pipeline` instances (plain-text vs OCR) shared across a file or directory ingest. Text files use `PlainTextExtractor`; other files (e.g. PDFs) use `MistralOCRExtractor` (requires `MISTRAL_API_KEY`).

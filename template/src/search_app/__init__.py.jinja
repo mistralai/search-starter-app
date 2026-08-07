@@ -57,6 +57,32 @@ POSTGRES_COLLECTION = PostgresCollectionSchema(
     distance_metric="cosine",
 )
 
+# Columns removed from the declaration above but deliberately still in the database, spelled
+# `"<table>.<column>"`.
+#
+# Dropping a field takes two releases, not one. The store names its columns explicitly in every
+# INSERT, so a column has to outlive the release that stopped writing it — drop both at once and
+# the previous version's pods break the moment the migration lands. That leaves one release where
+# the database holds a column the declaration does not, which `alembic check` would otherwise
+# report as drift, forcing the drop back into the same release and defeating the point.
+#
+# Each entry is a promise to drop the column in the next release. Deleting the entry makes the
+# check fire again, so an entry cannot quietly become permanent.
+PENDING_DROP: set[str] = set()
+
+
+def include_object(obj: object, name: str | None, type_: str, reflected: bool, compare_to: object) -> bool:
+    """Hide a column that is mid-retirement from autogenerate, and nothing else.
+
+    Handed to Alembic by `alembic/env.py`. Scoped as tightly as it can be: only columns, only
+    ones the database has and the declaration does not, and only those named in `PENDING_DROP`.
+    """
+    if type_ == "column" and reflected and compare_to is None:
+        table = getattr(getattr(obj, "table", None), "name", "")
+        return f"{table}.{name}" not in PENDING_DROP
+    return True
+
+
 app = PostgresApp([POSTGRES_COLLECTION])
 
 
