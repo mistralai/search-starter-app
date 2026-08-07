@@ -135,7 +135,7 @@ def test_a_column_pending_drop_is_tolerated_for_one_release(migrated_database: C
 def test_an_index_pending_drop_is_tolerated_for_one_release(migrated_database: Config) -> None:
     """The same window, for the index half of a metric change.
 
-    `op.retune_vector_index(..., drop_old=False)` deliberately leaves the old HNSW index behind,
+    A metric change builds the new HNSW index and deliberately leaves the old one behind,
     because a pod on the previous metric emits an operator the new index cannot serve. The
     declaration names only the new index, so without an entry that leftover reads as drift for
     the whole expand window — the same trap the column case has.

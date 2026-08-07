@@ -68,8 +68,8 @@ POSTGRES_COLLECTION = PostgresCollectionSchema(
 #
 #   * a column, because the store names its columns explicitly in every INSERT
 #   * an HNSW index whose operator class is changing, because a pod on the old metric emits an
-#     operator the new index cannot serve and would fall back to a sequential scan (this is the
-#     `drop_old=False` half of `op.retune_vector_index`)
+#     operator the new index cannot serve and would fall back to a sequential scan — so the
+#     revision builds the new index and leaves the old one's `op.drop_index` for the next
 #
 # Either way there is one release where the database holds something the declaration does not,
 # which `alembic check` would report as drift — forcing the drop back into the same release and

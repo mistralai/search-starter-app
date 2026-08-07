@@ -8,9 +8,9 @@ autogenerate at it and it writes static DDL for the collection alongside any tab
 own, in one revision, under one ``alembic_version``. It is also what makes ``alembic check``
 a drift test between the chain and what the running app expects.
 
-The ``alembic_ops`` import adds ``op.retune_vector_index`` to the ``op`` namespace -- the one
-operation autogenerate cannot express, because rebuilding an HNSW index without blocking
-writes is a choice about *how* a change rolls out rather than about the end state.
+The ``alembic_ops`` import adds ``op.build_vector_index`` to the ``op`` namespace -- the one
+operation autogenerate cannot express, because building an HNSW index without blocking writes
+is a choice about *how* a change rolls out rather than about the end state.
 
 ``load_dotenv(override=True)`` matches the entrypoints. Reading ``POSTGRES_DSN`` through the
 same function is not enough on its own: if the entrypoints loaded ``.env`` and this did not,
