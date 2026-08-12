@@ -179,8 +179,6 @@ index = get_index(os.environ["COLLECTION_NAME"])
 |--------|---------|
 | `make setup-postgres` | `docker compose up` (pgvector) + `make migrate` |
 | `make migrate` | `alembic upgrade head` — applies the chain in `alembic/versions/` |
-| `make structure` | Re-render `alembic/structure.sql` from the declaration (no database needed) |
-| `make test` | Schema checks: snapshot is current, and the chain builds what the app expects |
 | `make start-postgres` / `make stop-postgres` | Start/stop the container without touching data |
 | `make reset-postgres` | Stop container and remove the `postgres-data` volume |
 | `make ingest path=...` | `python -m entrypoints.ingest` (file or directory) |

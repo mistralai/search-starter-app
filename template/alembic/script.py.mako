@@ -10,8 +10,6 @@ from collections.abc import Sequence
 import pgvector.sqlalchemy  # noqa: F401 - renders vector column types in generated revisions
 import sqlalchemy as sa
 from alembic import op
-
-from mistralai.search.toolkit.plugins.postgres import alembic_ops  # noqa: F401 - registers the ops
 ${imports if imports else ""}
 
 revision: str = ${repr(up_revision)}

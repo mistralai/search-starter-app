@@ -43,10 +43,6 @@ workflows = [
 dev = [
     "ruff>=0.11",
     "mypy>=1.15",
-{%- if backend == 'postgres' %}
-    # `make test` runs the schema checks in tests/.
-    "pytest>=8.0",
-{%- endif %}
 ]
 
 [tool.uv]

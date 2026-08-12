@@ -74,7 +74,7 @@ generate-vespa-lock:
 		--app-dir src/search_app \
 		--path ./vespa.lock
 {%- else -%}
-.PHONY: installdeps install-workflows setup-postgres start-postgres stop-postgres reset-postgres migrate structure test ingest search mcp start-examples execute-ingestion
+.PHONY: installdeps install-workflows setup-postgres start-postgres stop-postgres reset-postgres migrate ingest search mcp start-examples execute-ingestion
 
 ifneq (,$(wildcard .env))
 include .env
@@ -106,16 +106,6 @@ reset-postgres:
 ## Apply the Alembic chain in alembic/ (Postgres analogue of migrate-vespa)
 migrate:
 	uv run alembic upgrade head
-
-## Re-render alembic/structure.sql from the collection declaration. No database needed.
-## Run after changing the declaration, and add a revision for the same change.
-structure:
-	uv run python -m search_app.postgres_structure
-
-## Run the schema checks: structure.sql is current, and the chain builds what the app expects
-## (the second needs Postgres running; it skips otherwise).
-test:
-	uv run pytest tests/ -q
 
 ## Ingest a file or directory (Search Toolkit Pipeline)
 ## Usage: make ingest path=sample_data/hello.txt
