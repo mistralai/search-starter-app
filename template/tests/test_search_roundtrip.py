@@ -36,6 +36,17 @@ EMBEDDING_DIM = 128
 
 COLLECTION_NAME = os.environ.get("COLLECTION_NAME", "exampledocs")
 PROBE_VECTOR = [0.1] * EMBEDDING_DIM
+CONTENT = "the quick brown fox"
+
+
+def _query(top_k: int) -> VectorSearchQuery:
+    """The same query shape for both backends.
+
+    `query` is the keyword half. Postgres is dense-only and ignores it, but Vespa builds hybrid
+    YQL and rejects an empty one with "Parsing '' only resulted in NullItem" -- so a query
+    carrying the embedding alone passes on one backend and fails on the other.
+    """
+    return VectorSearchQuery(query=CONTENT, embedding=PROBE_VECTOR, top_k=top_k)
 
 
 async def _open_ready_index() -> VectorStoreIndex:
@@ -48,7 +59,7 @@ async def _open_ready_index() -> VectorStoreIndex:
     """
     index: VectorStoreIndex = get_index(COLLECTION_NAME)
     try:
-        await index.search(VectorSearchQuery(embedding=PROBE_VECTOR, top_k=1))
+        await index.search(_query(top_k=1))
     except Exception as exc:  # noqa: BLE001 - any failure here means the backend is not ready
         pytest.skip(f"backend not ready for collection {COLLECTION_NAME!r} ({exc}); run `make setup-*` first")
     return index
@@ -61,20 +72,19 @@ async def _index_then_search() -> tuple[str, list[str]]:
     document_id = f"roundtrip-{uuid.uuid4()}"
     source_id = f"{document_id}.txt"
     chunk_id = f"{document_id}-chunk-0"
-    content = "the quick brown fox"
 
     document = Document(
         id=document_id,
         source_id=source_id,
-        content=content,
+        content=CONTENT,
         chunks=[
             DocumentChunk(
                 id=chunk_id,
                 source_id=source_id,
                 locator="1",
-                content=content,
+                content=CONTENT,
                 start_offset=0,
-                end_offset=len(content),
+                end_offset=len(CONTENT),
                 embedding=PROBE_VECTOR,
             )
         ],
@@ -82,7 +92,7 @@ async def _index_then_search() -> tuple[str, list[str]]:
 
     await store.index_document(document)
     try:
-        results = await store.search(VectorSearchQuery(embedding=PROBE_VECTOR, top_k=5))
+        results = await store.search(_query(top_k=5))
         return chunk_id, [result.chunk.id for result in results]
     finally:
         # Leave the collection as it was found, so repeated runs stay meaningful.
