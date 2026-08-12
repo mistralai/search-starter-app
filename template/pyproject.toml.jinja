@@ -43,6 +43,8 @@ workflows = [
 dev = [
     "ruff>=0.11",
     "mypy>=1.15",
+    # `make test` round-trips a document through the backend; see tests/.
+    "pytest>=8.0",
 ]
 
 [tool.uv]

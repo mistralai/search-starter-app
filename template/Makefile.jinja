@@ -1,23 +1,32 @@
-{% if backend == 'vespa' -%}
-.PHONY: installdeps install-workflows setup-vespa start-vespa stop-vespa reset-vespa migrate-vespa verify-vespa ingest search mcp bruno generate-vespa-lock start-examples execute-ingestion
+.PHONY: installdeps install-workflows ingest search mcp test start-examples execute-ingestion
+{%- if backend == 'vespa' %}
+.PHONY: setup-vespa start-vespa verify-vespa stop-vespa reset-vespa migrate-vespa bruno generate-vespa-lock
+{%- else %}
+.PHONY: setup-postgres start-postgres stop-postgres reset-postgres migrate
+{%- endif %}
 
 ifneq (,$(wildcard .env))
 include .env
 export
 endif
 
+MCP_HOST := $(or $(host),127.0.0.1)
+MCP_PORT := $(or $(port),8000)
+{%- if backend == 'vespa' %}
 VESPA_CONTAINER := {{ _copier_conf.dst_path.name }}-vespa
 VESPA_QUERY_PORT := $(or $(VESPA_QUERY_PORT),18080)
 VESPA_CONFIG_PORT := $(or $(VESPA_CONFIG_PORT),19072)
 VESPA_ENDPOINT := $(or $(VESPA_ENDPOINT),http://localhost:$(VESPA_QUERY_PORT))
 VESPA_CONFIG_URL := $(or $(VESPA_CONFIG_URL),http://localhost:$(VESPA_CONFIG_PORT))
-MCP_HOST := $(or $(host),127.0.0.1)
-MCP_PORT := $(or $(port),8000)
+{%- else %}
+POSTGRES_CONTAINER := {{ _copier_conf.dst_path.name }}-postgres
+{%- endif %}
 
 ## Install dependencies
 installdeps:
 	uv sync
 
+{% if backend == 'vespa' -%}
 ## Start Vespa and apply schema migrations
 setup-vespa: start-vespa migrate-vespa
 
@@ -44,51 +53,7 @@ migrate-vespa: verify-vespa
 	uv run mistral-vespa migrate --app-dir src/search_app \
 		--config-server $(VESPA_CONFIG_URL) \
 		--query-port $(VESPA_QUERY_PORT)
-
-## Ingest a file or directory (Search Toolkit Pipeline)
-## Usage: make ingest path=sample_data/hello.txt
-##        make ingest path=sample_data
-ingest:
-	uv run python -m entrypoints.ingest $(path)
-
-## Search the indexed collection (Search Toolkit QueryEngine)
-## Usage: make search query="hello world" [top_k=5] [query_profile=hybrid-search]
-search:
-	uv run python -m entrypoints.search "$(query)" $(if $(top_k),--top-k $(top_k),) $(if $(query_profile),--query-profile $(query_profile),)
-
-## Start the MCP server in HTTP mode
-## Usage: make mcp [host=0.0.0.0] [port=8000]
-mcp:
-	uv run python -m entrypoints.mcp_server --http --host $(MCP_HOST) --port $(MCP_PORT)
-
-## Generate Bruno API files under vespa/bruno/vespa/ (requires WORKSPACE_ROOT in .env)
-bruno:
-	uv run mistral-vespa bruno \
-		--app-dir src/search_app \
-		--query-url $(VESPA_ENDPOINT) \
-		--document-url $(VESPA_ENDPOINT)
-
-## Optional: write a vespa.lock snapshot for inspection or CI
-generate-vespa-lock:
-	uv run mistral-vespa generate \
-		--app-dir src/search_app \
-		--path ./vespa.lock
 {%- else -%}
-.PHONY: installdeps install-workflows setup-postgres start-postgres stop-postgres reset-postgres migrate ingest search mcp start-examples execute-ingestion
-
-ifneq (,$(wildcard .env))
-include .env
-export
-endif
-
-POSTGRES_CONTAINER := {{ _copier_conf.dst_path.name }}-postgres
-MCP_HOST := $(or $(host),127.0.0.1)
-MCP_PORT := $(or $(port),8000)
-
-## Install dependencies
-installdeps:
-	uv sync
-
 ## Start Postgres and bring the schema up to date
 setup-postgres: start-postgres migrate
 
@@ -106,6 +71,7 @@ reset-postgres:
 ## Apply the Alembic chain in alembic/ (Postgres analogue of migrate-vespa)
 migrate:
 	uv run alembic upgrade head
+{%- endif %}
 
 ## Ingest a file or directory (Search Toolkit Pipeline)
 ## Usage: make ingest path=sample_data/hello.txt
@@ -114,16 +80,38 @@ ingest:
 	uv run python -m entrypoints.ingest $(path)
 
 ## Search the indexed collection (Search Toolkit QueryEngine)
+{%- if backend == 'vespa' %}
+## Usage: make search query="hello world" [top_k=5] [query_profile=hybrid-search]
+search:
+	uv run python -m entrypoints.search "$(query)" $(if $(top_k),--top-k $(top_k),) $(if $(query_profile),--query-profile $(query_profile),)
+{%- else %}
 ## Usage: make search query="hello world" [top_k=5]
 search:
 	uv run python -m entrypoints.search "$(query)" $(if $(top_k),--top-k $(top_k),)
+{%- endif %}
 
-## Start the MCP server in HTTP mode (Postgres must be running)
+## Start the MCP server in HTTP mode{% if backend == 'postgres' %} (Postgres must be running){% endif %}
 ## Usage: make mcp [host=0.0.0.0] [port=8000]
 mcp:
 	uv run python -m entrypoints.mcp_server --http --host $(MCP_HOST) --port $(MCP_PORT)
-{%- endif %}
 
+## Round-trip a document through the configured backend (skips unless it is set up)
+test:
+	uv run pytest tests/ -q
+{% if backend == 'vespa' %}
+## Generate Bruno API files under vespa/bruno/vespa/ (requires WORKSPACE_ROOT in .env)
+bruno:
+	uv run mistral-vespa bruno \
+		--app-dir src/search_app \
+		--query-url $(VESPA_ENDPOINT) \
+		--document-url $(VESPA_ENDPOINT)
+
+## Optional: write a vespa.lock snapshot for inspection or CI
+generate-vespa-lock:
+	uv run mistral-vespa generate \
+		--app-dir src/search_app \
+		--path ./vespa.lock
+{% endif %}
 ## Install optional workflows dependency (required for examples/workflows/)
 install-workflows:
 	uv sync --extra workflows

@@ -1,7 +1,7 @@
-{% if backend == 'vespa' -%}
+{% if backend == 'vespa' %}{% set backend_name = 'Vespa' %}{% else %}{% set backend_name = 'Postgres' %}{% endif -%}
 # {{ _copier_conf.dst_path.name }}
 
-A [Mistral Search Toolkit](https://pypi.org/project/mistralai-search-toolkit/) project with a Vespa backend.
+A [Mistral Search Toolkit](https://pypi.org/project/mistralai-search-toolkit/) project with a {% if backend == 'vespa' %}Vespa{% else %}Postgres (pgvector){% endif %} backend.
 
 SDK namespace: `mistralai.search.toolkit` — see the [toolkit docs](https://github.com/mistralai/mistral-pro/tree/main/dashboards/main/search/toolkit) for architecture and extension guides.
 
@@ -12,9 +12,12 @@ make installdeps
 ```
 
 `MISTRAL_API_KEY` is set in `.env` from the value you entered during `copier copy` (or edit `.env` later). Project name matches the folder you passed to `copier copy` (this directory).
-
+{% if backend == 'postgres' %}
+The Postgres connection string lives in `.env` as `POSTGRES_DSN` (defaults to the
+local dev container: `postgresql://pg:1234@localhost:5432/postgres`).
+{% endif %}
 ## Commands
-
+{% if backend == 'vespa' %}
 ### Start Vespa and apply schema migrations
 
 ```bash
@@ -31,117 +34,7 @@ To wipe local Vespa data and redeploy from scratch:
 make reset-vespa
 make setup-vespa
 ```
-
-### Ingest documents
-
-Uses two `Pipeline` instances (plain-text vs OCR) shared across a file or directory ingest. Text files use `PlainTextExtractor`; other files (e.g. PDFs) use `MistralOCRExtractor` (requires `MISTRAL_API_KEY`).
-
-```bash
-make ingest path=sample_data/hello.txt
-make ingest path=sample_data
-```
-
-### Search the collection
-
-Uses `QueryEngine` with `VectorRetriever` (hybrid BM25 + vector via Vespa):
-
-```bash
-make search query="hello world"
-```
-
-Ranking weights live in a Vespa **query profile**, not in the request. The search defaults to the `hybrid-search` profile (tuned BM25 + vector weights, defined in `src/search_app/migrations/001_vespa_create_index_schema.py`).
-
-### MCP server
-
-The sample app includes an MCP server which exposes search, agentic navigation, and ingest as MCP tools so agents (Vibe, Claude Code, etc.) can query and populate the local index directly.
-
-The server fails fast at startup with a clear error if `MISTRAL_API_KEY` is missing or if the search index does not support agentic navigation. Vespa must be running before you start the server (`make start-vespa`).
-
-**Available tools:**
-
-| Tool | Description |
-|------|-------------|
-| `search(query, top_k=5)` | Hybrid BM25 + vector search; returns ranked chunks with score, content, source_id, locator, **start_offset**, **end_offset**, and metadata |
-| `ingest(uri)` | Ingest a local path/directory, `file://` URI, or `http(s)://` URL; text files use plain-text extraction, everything else uses Mistral OCR |
-| `open_source(source_id, start_offset, end_offset, window=2)` | Expand around a search hit — returns the anchor chunk plus `window` neighbours on each side, in reading order |
-| `navigate_source(source_id, start_offset, end_offset, direction, top_k=1)` | Step through a document from a known position; `direction` is `"next"` or `"previous"` |
-| `read_source(source_id, start_offset=None, end_offset=None, top_k=20)` | Fetch a known offset range directly; omit either bound to read from the start or to the end |
-| `grep_source(source_id, pattern, mode="phrase", top_k=5)` | Lexical search within a single source; `mode` is `"phrase"` (ordered) or `"term"` (any order) |
-
-### Vibe CLI
-
-Run `vibe` from this project directory. It automatically reads `.vibe/config.toml` and connects to the server via stdio — no manual setup needed. You can immediately ask Vibe to search or ingest documents.
-
-> On first run, Vibe will ask you to trust this directory before loading the project config. Accept the prompt, or pass `--trust` to skip it for that session.
-
-### Claude Code
-
-Open this project directory in Claude Code. It automatically reads `.mcp.json` and connects to the server via stdio — no manual setup needed. You can immediately ask Claude to search or ingest documents.
-
-### MCP Inspector
-
-```bash
-make mcp
-npx @modelcontextprotocol/inspector http://127.0.0.1:8000/mcp
-```
-
-### Bruno API files (optional)
-
-```bash
-make bruno
-```
-
-Opens collection under `vespa/bruno/vespa/` (uses `WORKSPACE_ROOT=.` from `.env`).
-
-### Vespa lock snapshot (optional)
-
-```bash
-make generate-vespa-lock
-```
-
-## Project layout
-
-```
-src/
-├── entrypoints/
-│   ├── ingest.py      # mistralai.search.toolkit.ingestion.pipelines.Pipeline
-│   ├── mcp_server.py  # MCP server (search + navigation + ingest tools)
-│   └── search.py      # mistralai.search.toolkit.retrieval.QueryEngine
-└── search_app/
-    ├── __init__.py    # VespaApp — mistralai.search.toolkit.plugins.vespa
-    └── migrations/    # mistral-vespa migrate
-.mcp.json             # MCP server config (auto-loaded by Claude Code)
-.vibe/config.toml     # MCP server config (auto-loaded by Vibe CLI)
-sample_data/          # Sample documents
-vespa/bruno/vespa/    # Generated by `make bruno` (optional)
-```
-
-## Development
-
-```bash
-uv run ruff format .
-uv run ruff check --fix .
-```
-{%- else -%}
-# {{ _copier_conf.dst_path.name }}
-
-A [Mistral Search Toolkit](https://pypi.org/project/mistralai-search-toolkit/) project with a Postgres (pgvector) backend.
-
-SDK namespace: `mistralai.search.toolkit` — see the [toolkit docs](https://github.com/mistralai/mistral-pro/tree/main/dashboards/main/search/toolkit) for architecture and extension guides.
-
-## Setup
-
-```bash
-make installdeps
-```
-
-`MISTRAL_API_KEY` is set in `.env` from the value you entered during `copier copy` (or edit `.env` later). Project name matches the folder you passed to `copier copy` (this directory).
-
-The Postgres connection string lives in `.env` as `POSTGRES_DSN` (defaults to the
-local dev container: `postgresql://pg:1234@localhost:5432/postgres`).
-
-## Commands
-
+{% else %}
 ### Start Postgres and migrate the schema
 
 ```bash
@@ -169,7 +62,7 @@ database. Changing one means changing the other.
 collection's table into `target_metadata` alongside any tables of your own, under a single
 `alembic_version`. How you author revisions, and how you roll a schema change out against a
 running deployment, are yours to decide — `make migrate` is just `alembic upgrade head`.
-
+{% endif %}
 ### Ingest documents
 
 Uses two `Pipeline` instances (plain-text vs OCR) shared across a file or directory ingest. Text files use `PlainTextExtractor`; other files (e.g. PDFs) use `MistralOCRExtractor` (requires `MISTRAL_API_KEY`).
@@ -181,26 +74,38 @@ make ingest path=sample_data
 
 ### Search the collection
 
-Uses `QueryEngine` with `VectorRetriever` (dense vector search via pgvector):
+Uses `QueryEngine` with `VectorRetriever` ({% if backend == 'vespa' %}hybrid BM25 + vector via Vespa{% else %}dense vector search via pgvector{% endif %}):
 
 ```bash
 make search query="hello world"
 ```
-
+{% if backend == 'vespa' %}
+Ranking weights live in a Vespa **query profile**, not in the request. The search defaults to the `hybrid-search` profile (tuned BM25 + vector weights, defined in `src/search_app/migrations/001_vespa_create_index_schema.py`).
+{% else %}
 Postgres search is dense top-k only — there are no Vespa-style query profiles, so
 there is no `query_profile=` option.
+{% endif %}
+### Run the tests
+
+```bash
+make test
+```
+
+One round-trip: a document is indexed and searched back through the same `get_index` the
+entrypoints use. It skips unless the backend is set up, so it is safe to run before
+`make setup-{{ backend }}`.
 
 ### MCP server
 
 The sample app includes an MCP server which exposes search, agentic navigation, and ingest as MCP tools so agents (Vibe, Claude Code, etc.) can query and populate the local index directly.
 
-The server fails fast at startup with a clear error if `MISTRAL_API_KEY` is missing or if the search index does not support agentic navigation. Postgres must be running before you start the server (`make start-postgres`).
+The server fails fast at startup with a clear error if `MISTRAL_API_KEY` is missing or if the search index does not support agentic navigation. {{ backend_name }} must be running before you start the server (`make start-{{ backend }}`).
 
 **Available tools:**
 
 | Tool | Description |
 |------|-------------|
-| `search(query, top_k=5)` | Dense vector search; returns ranked chunks with score, content, source_id, locator, **start_offset**, **end_offset**, and metadata |
+| `search(query, top_k=5)` | {% if backend == 'vespa' %}Hybrid BM25 + vector search{% else %}Dense vector search{% endif %}; returns ranked chunks with score, content, source_id, locator, **start_offset**, **end_offset**, and metadata |
 | `ingest(uri)` | Ingest a local path/directory, `file://` URI, or `http(s)://` URL; text files use plain-text extraction, everything else uses Mistral OCR |
 | `open_source(source_id, start_offset, end_offset, window=2)` | Expand around a search hit — returns the anchor chunk plus `window` neighbours on each side, in reading order |
 | `navigate_source(source_id, start_offset, end_offset, direction, top_k=1)` | Step through a document from a known position; `direction` is `"next"` or `"previous"` |
@@ -223,10 +128,39 @@ Open this project directory in Claude Code. It automatically reads `.mcp.json` a
 make mcp
 npx @modelcontextprotocol/inspector http://127.0.0.1:8000/mcp
 ```
+{% if backend == 'vespa' %}
+### Bruno API files (optional)
 
+```bash
+make bruno
+```
+
+Opens collection under `vespa/bruno/vespa/` (uses `WORKSPACE_ROOT=.` from `.env`).
+
+### Vespa lock snapshot (optional)
+
+```bash
+make generate-vespa-lock
+```
+{% endif %}
 ## Project layout
 
 ```
+{% if backend == 'vespa' -%}
+src/
+├── entrypoints/
+│   ├── ingest.py      # mistralai.search.toolkit.ingestion.pipelines.Pipeline
+│   ├── mcp_server.py  # MCP server (search + navigation + ingest tools)
+│   └── search.py      # mistralai.search.toolkit.retrieval.QueryEngine
+└── search_app/
+    ├── __init__.py    # VespaApp — mistralai.search.toolkit.plugins.vespa
+    └── migrations/    # mistral-vespa migrate
+tests/                # make test — one index-and-search round-trip
+.mcp.json             # MCP server config (auto-loaded by Claude Code)
+.vibe/config.toml     # MCP server config (auto-loaded by Vibe CLI)
+sample_data/          # Sample documents
+vespa/bruno/vespa/    # Generated by `make bruno` (optional)
+{%- else -%}
 src/
 ├── entrypoints/
 │   ├── ingest.py          # mistralai.search.toolkit.ingestion.pipelines.Pipeline
@@ -235,9 +169,11 @@ src/
 └── search_app/
     └── __init__.py        # PostgresApp + the collection declaration
 alembic/                   # migration chain (make migrate)
+tests/                     # make test — one index-and-search round-trip
 .mcp.json                  # MCP server config (auto-loaded by Claude Code)
 .vibe/config.toml          # MCP server config (auto-loaded by Vibe CLI)
 sample_data/               # Sample documents
+{%- endif %}
 ```
 
 ## Development
@@ -246,4 +182,3 @@ sample_data/               # Sample documents
 uv run ruff format .
 uv run ruff check --fix .
 ```
-{%- endif %}

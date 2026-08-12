@@ -21,12 +21,12 @@ _exclude:
   # it can't carry a backend token). Excluding only the *vespa* file inside it would
   # leave an empty migrations/ dir on Postgres, so drop the whole directory here.
   - "{% if backend == 'postgres' %}migrations{% endif %}"
-  # Same for the Postgres-only paths whose names Alembic and pytest fix for us:
-  # `alembic/` is where `script_location` points, and `tests/` only holds the schema
-  # checks that come with the Alembic chain. Dropped whole on Vespa.
+  # Same for the Postgres-only path whose name Alembic fixes for us: `alembic/` is where
+  # `script_location` points, so it cannot carry a backend token either. Dropped whole on Vespa.
+  # `tests/` is deliberately not excluded: the round-trip in there is backend-agnostic and runs
+  # against whichever backend the project was generated with.
   - "{% if backend == 'vespa' %}alembic{% endif %}"
   - "{% if backend == 'vespa' %}alembic.ini{% endif %}"
-  - "{% if backend == 'vespa' %}tests{% endif %}"
 
 backend:
   type: str
