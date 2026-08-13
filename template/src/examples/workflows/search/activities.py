@@ -1,11 +1,12 @@
 """Activities for the document ingestion workflow.
 
-All I/O lives here: file system access, embedding calls, and Vespa writes.
-The workflow body in workflow.py calls these as durable, retryable units.
+All I/O lives here: file system access, embedding calls, and writes to the
+configured search backend. The workflow body in workflow.py calls these as
+durable, retryable units.
 
 Stateless pipeline components and API clients are provided via Depends() so
 the SDK initialises them once at worker startup and reuses them across every
-activity execution. The only per-call objects are VespaSearchIndex and the
+activity execution. The only per-call objects are the store index and the
 Pipeline wrappers, because they are keyed to the collection_name input.
 """
 
@@ -28,9 +29,8 @@ from mistralai.search.toolkit.ingestion.text_splitters import (
     MarkdownTextSplitter,
     MarkdownTextSplitterConfig,
 )
-from mistralai.search.toolkit.plugins.vespa import VespaClientConfig
 from mistralai.workflows import Depends
-from vespa_app import app, vespa_endpoint
+from search_app import get_index
 
 from .models import IngestionResult
 
@@ -85,7 +85,7 @@ def _build_pipelines(
 ) -> tuple[Pipeline, Pipeline]:
     """Assemble plain-text and OCR pipelines from shared components.
 
-    VespaSearchIndex (vector_store) is the only per-call argument because
+    The store index (vector_store) is the only per-call argument because
     it is keyed to the collection_name supplied at runtime.
     """
     shared = dict(
@@ -146,10 +146,7 @@ async def ingest_documents(
     text_splitter: MarkdownTextSplitter = Depends(get_text_splitter),
 ) -> IngestionResult:
     """Run the ingestion pipelines on a pre-collected list of file paths."""
-    vector_store = app.get_search_index(
-        VespaClientConfig(endpoint=vespa_endpoint()),
-        collection_name=collection_name,
-    )
+    vector_store = get_index(collection_name)
     plain_text_pipeline, ocr_pipeline = _build_pipelines(
         loader, text_splitter, embedder, ocr_extractor, vector_store
     )

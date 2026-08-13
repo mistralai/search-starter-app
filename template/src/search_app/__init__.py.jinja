@@ -1,0 +1,101 @@
+{% if backend == 'vespa' -%}
+import os
+from pathlib import Path
+
+from mistralai.search.toolkit.plugins.vespa import VespaApp, VespaClientConfig
+
+# Default query profile applied by the search entrypoint (tuned BM25 + vector
+# weights). Defined in ``migrations/001_vespa_create_index_schema.py``.
+DEFAULT_QUERY_PROFILE = "hybrid-search"
+
+app = VespaApp(Path(__file__).parent)
+
+
+def vespa_endpoint() -> str:
+    """Query API URL from VESPA_QUERY_PORT (or optional VESPA_ENDPOINT override)."""
+    if url := os.environ.get("VESPA_ENDPOINT"):
+        return url
+    port = os.environ.get("VESPA_QUERY_PORT", "18080")
+    return f"http://localhost:{port}"
+
+
+def get_index(collection_name: str, query_profile: str = DEFAULT_QUERY_PROFILE):
+    """Return a live store index for ``collection_name`` on the configured backend."""
+    return app.get_search_index(
+        VespaClientConfig(endpoint=vespa_endpoint()),
+        collection_name=collection_name,
+        query_profile=query_profile,
+    )
+{%- else -%}
+import os
+
+from sqlalchemy.engine import make_url
+
+from mistralai.search.toolkit.document import Document
+from mistralai.search.toolkit.plugins.postgres import (
+    PostgresApp,
+    PostgresCollectionSchema,
+    PostgresConnectionConfig,
+)
+
+# Embedding dimension must match the embedder used in the entrypoints.
+# MistralEmbedder defaults to the 128-dimension model.
+_EMBEDDING_DIM = 128
+
+# Fixed at generation time rather than read from COLLECTION_NAME, because the Alembic
+# chain in alembic/versions/ builds a table of exactly this name. If the two could drift
+# apart, the store would bind to a table no migration created and fail at query time;
+# as it is, asking for a collection this app does not declare fails immediately with a
+# list of the ones it does. Renaming means a new revision, not a new env var.
+COLLECTION_NAME = "{{ collection_name }}"
+
+# The declaration is the source of truth for the running app; the revisions in
+# alembic/versions/ are the history of how the database got there. Keep them in step:
+# a change here needs a revision that makes the database match.
+POSTGRES_COLLECTION = PostgresCollectionSchema(
+    collection_name=COLLECTION_NAME,
+    document_type=Document,
+    dim=_EMBEDDING_DIM,
+    distance_metric="cosine",
+)
+
+app = PostgresApp([POSTGRES_COLLECTION])
+
+
+def postgres_dsn() -> str:
+    """Postgres DSN from POSTGRES_DSN (falls back to the local dev container)."""
+    return os.environ.get("POSTGRES_DSN", "postgresql://pg:1234@localhost:5432/postgres")
+
+
+def postgres_migration_url() -> str:
+    """The same database as :func:`postgres_dsn`, spelled for a sync driver.
+
+    Alembic drives a sync engine while the store's runtime path is asyncpg. Deriving one
+    from the other rather than configuring them separately is what stops
+    `alembic upgrade head` and the app from being pointed at different databases.
+
+    The driver is replaced rather than string-substituted, matching what
+    `PostgresConnectionConfig.url` does to reach asyncpg. A DSN spelled `postgresql+asyncpg://`
+    is valid for the store, which overwrites the driver anyway; a literal replace would leave it
+    untouched and hand Alembic a URL it cannot drive synchronously.
+    """
+    return make_url(postgres_dsn()).set(drivername="postgresql+psycopg").render_as_string(hide_password=False)
+
+
+def _connection_config() -> PostgresConnectionConfig:
+    return PostgresConnectionConfig(dsn=postgres_dsn())
+
+
+def get_index(collection_name: str):
+    """Return a live store index for ``collection_name`` on the configured backend."""
+    return app.get_search_index(
+        _connection_config(),
+        collection_name=collection_name,
+    )
+
+
+# There is deliberately no `create_schema` here. `PostgresApp.create_schema` is the
+# minimal path for a deployment with no migration chain; this project has one, so the
+# table is created by `make migrate` (`alembic upgrade head`) and every later schema
+# change goes through the same ordering.
+{%- endif %}

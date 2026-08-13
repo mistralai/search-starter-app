@@ -1,6 +1,41 @@
 _min_copier_version: "9.0.0"
 _subdirectory: "template"
 
+# Backend-specific files carry the backend name in their path, so filtering is a
+# plain glob on that token. Keep the copier defaults (a bare `_exclude` replaces
+# them) and add the two backend guards.
+_exclude:
+  - "copier.yml"
+  - "copier.yaml"
+  - "~*"
+  - "*.py[co]"
+  - "__pycache__"
+  - ".git"
+  - ".DS_Store"
+  - ".svn"
+  # On Vespa, drop every *postgres* path (e.g. entrypoints/postgres_create_schema.py).
+  - "{% if backend == 'vespa' %}*postgres*{% endif %}"
+  # On Postgres, drop every *vespa* path (e.g. migrations/001_vespa_create_index_schema.py).
+  - "{% if backend == 'postgres' %}*vespa*{% endif %}"
+  # migrations/ is Vespa-only (VespaApp hardcodes the "migrations" subdir name, so
+  # it can't carry a backend token). Excluding only the *vespa* file inside it would
+  # leave an empty migrations/ dir on Postgres, so drop the whole directory here.
+  - "{% if backend == 'postgres' %}migrations{% endif %}"
+  # Same for the Postgres-only path whose name Alembic fixes for us: `alembic/` is where
+  # `script_location` points, so it cannot carry a backend token either. Dropped whole on Vespa.
+  # `tests/` is deliberately not excluded: the round-trip in there is backend-agnostic and runs
+  # against whichever backend the project was generated with.
+  - "{% if backend == 'vespa' %}alembic{% endif %}"
+  - "{% if backend == 'vespa' %}alembic.ini{% endif %}"
+
+backend:
+  type: str
+  choices:
+    - vespa
+    - postgres
+  default: vespa
+  help: "Search backend (vespa = hybrid BM25 + vector; postgres = pgvector dense)"
+
 mistral_api_key:
   type: str
   secret: true
@@ -10,4 +45,25 @@ mistral_api_key:
 collection_name:
   type: str
   default: "exampledocs"
-  help: "Vespa collection name (must match the schema migration)"
+  help: "Collection name (must match the schema created for the chosen backend)"
+  # On Postgres the name is baked into the table and into every index derived from it, and
+  # Postgres truncates identifiers at 63 bytes rather than erroring -- so the ceiling here is
+  # 63 minus the longest generated suffix (`_chunks_hnsw_m16_efc64_hv_cos`). Catching it now
+  # beats a confusing failure the first time the project is imported.
+  validator: >-
+    {% if not (collection_name | regex_search('^[a-z][a-z0-9_]*$')) %}
+    Must start with a letter and contain only lowercase letters, digits and underscores.
+    {% elif backend == 'postgres' and collection_name | length > 34 %}
+    Too long for Postgres: at most 34 characters, because index names derive from it.
+    {% endif %}
+
+postgres_plugin_path:
+  type: str
+  default: ""
+  when: "{{ backend == 'postgres' }}"
+  help: >-
+    Path to a local checkout of mistralai-search-toolkit-plugins-postgres
+    (e.g. ../dashboard/search/toolkit/plugins/postgres). The toolkit core is
+    resolved from its sibling (<path>/../../core), because the plugin needs
+    unreleased core APIs not in the published wheel. Required until the plugin
+    and a matching core are published; leave empty once they are on the index.

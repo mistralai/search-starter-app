@@ -1,4 +1,4 @@
-"""MCP server exposing search and ingest tools for the local Vespa index."""
+"""MCP server exposing search and ingest tools for the local search index."""
 
 import os
 from pathlib import Path
@@ -22,11 +22,10 @@ from mistralai.search.toolkit.ingestion.text_splitters import (
     MarkdownTextSplitter,
     MarkdownTextSplitterConfig,
 )
-from mistralai.search.toolkit.plugins.vespa import VespaClientConfig
 from mistralai.search.toolkit.retrieval import QueryEngine, VectorRetriever
 from mistralai.search.toolkit.search import GrepMode, NavigableIndex, NavigationDirection
 from mistralai.search.toolkit.search.errors import DocumentNotFoundError
-from vespa_app import app, vespa_endpoint
+from search_app import get_index
 
 load_dotenv(override=True)
 
@@ -47,11 +46,7 @@ _mistral_client = Mistral(
     server_url=os.getenv("MISTRAL_API_URL", "https://api.mistral.ai"),
 )
 _embedder = MistralEmbedder(client=_mistral_client)
-_vector_store = app.get_search_index(
-    VespaClientConfig(endpoint=vespa_endpoint()),
-    collection_name=_collection_name,
-    query_profile="hybrid-search",
-)
+_vector_store = get_index(_collection_name)
 if not isinstance(_vector_store, NavigableIndex):
     raise RuntimeError(
         "The search index does not support agentic navigation. "
@@ -126,7 +121,7 @@ def _format_chunks(results: list) -> list[dict]:
 
 @mcp.tool()
 async def search(query: str, top_k: int = 5) -> list[dict]:
-    """Search the document collection with hybrid BM25 + vector retrieval.
+    """Search the document collection and return the most relevant chunks.
 
     Args:
         query: Natural-language search query.
@@ -200,7 +195,7 @@ async def _ingest_local(root: Path) -> str:
 
 @mcp.tool()
 async def ingest(uri: str) -> str:
-    """Ingest a document into the Vespa search index.
+    """Ingest a document into the search index.
 
     Accepts a local path, a file:// URI, or an http/https URL. Directories are
     walked recursively when given a local path. Text files (.txt, .md, .csv,
