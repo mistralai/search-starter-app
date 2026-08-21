@@ -8,6 +8,7 @@ from urllib.request import url2pathname
 import httpx
 from dotenv import load_dotenv
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 from mistralai.client import Mistral
 from mistralai.search.toolkit.embedders import MistralEmbedder
 from mistralai.search.toolkit.document import compute_id
@@ -87,7 +88,7 @@ mcp = FastMCP(
         "Retrieval loop: start with `search` to find relevant chunks across the "
         "collection, then drill into a promising hit *within its document* without "
         "re-running a global search:\n"
-        "- `open`     — expand context around a chunk (`window` controls the radius)\n"
+        "- `open`     — expand context around a chunk by its `id` (`window` controls the radius)\n"
         "- `grep`     — jump to an exact term or phrase in the same document\n"
         "- `navigate` — step sequentially through adjacent chunks\n"
         "- `read`     — fetch a known offset range directly (no context expansion)\n"
@@ -102,11 +103,13 @@ mcp = FastMCP(
 def _format_chunks(results: list) -> list[dict]:
     """Serialise SearchResult objects into a consistent dict shape.
 
-    Includes start_offset / end_offset so the model can pass them directly
-    to the agentic navigation tools (open, navigate, …).
+    Includes the chunk `id` (pass to open()) and start_offset / end_offset
+    (pass to navigate() / read()) so the model can drive the agentic
+    navigation tools directly.
     """
     return [
         {
+            "id": hit.chunk.id,
             "score": hit.score,
             "content": hit.chunk.content,
             "source_id": hit.chunk.source_id,
@@ -245,29 +248,31 @@ async def delete(source_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def open(
-    source_id: str, start_offset: int, end_offset: int, window: int = 2
-) -> list[dict]:
+async def open(chunk_id: str, window: int = 2) -> list[dict]:
     """Expand context around a chunk from search: return it plus adjacent chunks in reading order.
 
-    Use when you have a chunk from search() and want to see a window around it;
-    `window` controls how many chunks are pulled in on each side. When you already
-    know the exact range and want those chunks verbatim, use read() instead.
+    Pass the `id` of a chunk from a search() result; the server resolves its
+    position and pulls in `window` neighbouring chunks on each side. When you
+    already know the exact offset range and want those chunks verbatim, use
+    read() instead.
 
     Args:
-        source_id:    Source identifier from a search() result.
-        start_offset: start_offset from the anchor search() result.
-        end_offset:   end_offset from the anchor search() result.
-        window:       Number of adjacent chunks to fetch in each direction (default 2).
+        chunk_id: `id` of a chunk from a search() result.
+        window:   Number of adjacent chunks to fetch in each direction (default 2).
     """
+    anchor = await _navigable_store.get_chunk(chunk_id)
+    if anchor is None:
+        raise ToolError(f"chunk not found: {chunk_id!r}")
+    source_id = anchor.chunk.source_id
+    start_offset = anchor.chunk.start_offset or 0
+    end_offset = anchor.chunk.end_offset or 0
     prev = await _navigable_store.navigate(
         source_id, start_offset, end_offset, NavigationDirection.PREVIOUS, top_k=window
     )
-    current = await _navigable_store.read(source_id, start_offset, end_offset)
     nxt = await _navigable_store.navigate(
         source_id, start_offset, end_offset, NavigationDirection.NEXT, top_k=window
     )
-    return _format_chunks(prev + current + nxt)
+    return _format_chunks(prev + [anchor] + nxt)
 
 
 @mcp.tool()
