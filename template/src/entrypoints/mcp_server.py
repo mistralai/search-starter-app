@@ -87,10 +87,10 @@ mcp = FastMCP(
         "Retrieval loop: start with `search` to find relevant chunks across the "
         "collection, then drill into a promising hit *within its document* without "
         "re-running a global search:\n"
-        "- `open`     — expand context around a chunk\n"
+        "- `open`     — expand context around a chunk (`window` controls the radius)\n"
         "- `grep`     — jump to an exact term or phrase in the same document\n"
         "- `navigate` — step sequentially through adjacent chunks\n"
-        "- `read`     — read a known character-offset range\n"
+        "- `read`     — fetch a known offset range directly (no context expansion)\n"
         "Then call `search` again with a query informed by what you have read to "
         "connect information across documents. To scope a search to one document, "
         "include its title or source_id in the query.\n\n"
@@ -248,7 +248,11 @@ async def delete(source_id: str) -> str:
 async def open(
     source_id: str, start_offset: int, end_offset: int, window: int = 2
 ) -> list[dict]:
-    """Expand context around a retrieved chunk, returning adjacent chunks in reading order.
+    """Expand context around a chunk from search: return it plus adjacent chunks in reading order.
+
+    Use when you have a chunk from search() and want to see a window around it;
+    `window` controls how many chunks are pulled in on each side. When you already
+    know the exact range and want those chunks verbatim, use read() instead.
 
     Args:
         source_id:    Source identifier from a search() result.
@@ -297,8 +301,10 @@ async def read(
     end_offset: int | None = None,
     top_k: int = 20,
 ) -> list[dict]:
-    """Read chunks from a known character-offset range within a source.
+    """Fetch chunks from a known offset range: direct access, no context expansion.
 
+    Use when you already know the source and the exact range you want, and just
+    want those chunks back as-is (unlike open(), which expands around a chunk).
     Pass None for start_offset to read from the beginning, or None for
     end_offset to read to the end of the document.
 
