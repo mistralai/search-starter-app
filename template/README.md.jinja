@@ -107,10 +107,10 @@ The server fails fast at startup with a clear error if `MISTRAL_API_KEY` is miss
 |------|-------------|
 | `search(query, top_k=5)` | {% if backend == 'vespa' %}Hybrid BM25 + vector search{% else %}Dense vector search{% endif %}; returns ranked chunks with score, content, source_id, locator, **start_offset**, **end_offset**, and metadata |
 | `ingest(uri)` | Ingest a local path/directory, `file://` URI, or `http(s)://` URL; text files use plain-text extraction, everything else uses Mistral OCR |
-| `open_source(source_id, start_offset, end_offset, window=2)` | Expand around a search hit — returns the anchor chunk plus `window` neighbours on each side, in reading order |
-| `navigate_source(source_id, start_offset, end_offset, direction, top_k=1)` | Step through a document from a known position; `direction` is `"next"` or `"previous"` |
-| `read_source(source_id, start_offset=None, end_offset=None, top_k=20)` | Fetch a known offset range directly; omit either bound to read from the start or to the end |
-| `grep_source(source_id, pattern, mode="phrase", top_k=5)` | Lexical search within a single source; `mode` is `"phrase"` (ordered) or `"term"` (any order) |
+| `open(source_id, start_offset, end_offset, window=2)` | Expand context around a chunk from search — returns the anchor chunk plus `window` neighbours on each side, in reading order; `window` controls the radius |
+| `navigate(source_id, start_offset, end_offset, direction, top_k=1)` | Step through a document from a known position; `direction` is `"next"` or `"previous"` |
+| `read(source_id, start_offset=None, end_offset=None, top_k=20)` | Fetch a known offset range directly, no context expansion; omit either bound to read from the start or to the end |
+| `grep(source_id, pattern, mode="phrase", top_k=5)` | Lexical search within a single source; `mode` is `"phrase"` (ordered) or `"term"` (any order) |
 
 ### Vibe CLI
 
