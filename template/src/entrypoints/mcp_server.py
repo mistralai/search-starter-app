@@ -123,18 +123,24 @@ def _format_chunks(results: list) -> list[dict]:
 
 
 @mcp.tool()
-async def search(query: str, top_k: int = 5) -> list[dict]:
+async def search(
+    query: str, top_k: int = 5, exclude_ids: list[str] | None = None
+) -> list[dict]:
     """Search the document collection and return the most relevant chunks.
 
     Args:
-        query: Natural-language search query.
-        top_k: Maximum number of results to return (default 5).
+        query:       Natural-language search query.
+        top_k:       Maximum number of results to return (default 5).
+        exclude_ids: Chunk `id`s to skip at query time — e.g. chunks already
+                     seen earlier in an agentic loop, so each search surfaces
+                     fresh context instead of repeating hits.
     """
     result = await _query_engine.search(
         query=query,
         top_k=top_k,
         include_metadata=True,
         include_content=True,
+        exclude_ids=set(exclude_ids) if exclude_ids else None,
     )
     return _format_chunks(result.results)
 

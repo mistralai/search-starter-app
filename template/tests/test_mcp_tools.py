@@ -79,6 +79,54 @@ def _open_fn(mcp_server):
     return getattr(mcp_server.open, "fn", mcp_server.open)
 
 
+def _search_fn(mcp_server):
+    return getattr(mcp_server.search, "fn", mcp_server.search)
+
+
+class _EngineResult:
+    def __init__(self, results: list[SearchResult]) -> None:
+        self.results = results
+
+
+class _RecordingEngine:
+    """Captures the kwargs `search` forwards, returns one canned hit."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def search(self, **kwargs: object) -> _EngineResult:
+        self.calls.append(kwargs)
+        return _EngineResult([_result("c1", 0, 10, "hit")])
+
+
+def test_search_exposes_exclude_ids(mcp_server) -> None:
+    search_tool = asyncio.run(mcp_server.mcp.get_tool("search"))
+    props = search_tool.parameters["properties"]
+
+    assert "exclude_ids" in props
+    # Only `query` is mandatory; exclude_ids stays optional.
+    assert search_tool.parameters.get("required") == ["query"]
+
+
+def test_search_forwards_exclude_ids_as_a_set(mcp_server, monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _RecordingEngine()
+    monkeypatch.setattr(mcp_server, "_query_engine", engine)
+
+    asyncio.run(_search_fn(mcp_server)("q", exclude_ids=["a", "b", "a"]))
+
+    assert engine.calls[0]["exclude_ids"] == {"a", "b"}
+
+
+def test_search_defaults_exclude_ids_to_none(mcp_server, monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _RecordingEngine()
+    monkeypatch.setattr(mcp_server, "_query_engine", engine)
+
+    asyncio.run(_search_fn(mcp_server)("q"))
+
+    # Empty/absent stays None so the backend skips the filter entirely.
+    assert engine.calls[0]["exclude_ids"] is None
+
+
 def test_open_takes_a_chunk_id_and_read_stays_offset_addressed(mcp_server) -> None:
     open_tool = asyncio.run(mcp_server.mcp.get_tool("open"))
     read_tool = asyncio.run(mcp_server.mcp.get_tool("read"))
