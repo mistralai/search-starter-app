@@ -29,9 +29,9 @@ from mistralai.search.toolkit.document import Document, DocumentChunk
 from mistralai.search.toolkit.search import VectorSearchQuery, VectorStoreIndex
 from search_app import get_index
 
-# Matches the dimension the app declares -- `_EMBEDDING_DIM` for Postgres, the schema's
-# `embedding_dimensions` for Vespa. Changing one without the other is what this test should fail
-# on, so it is stated here rather than imported from whichever backend is in use.
+# Matches the dimension the app declares -- 128 for Postgres (MistralEmbeddingPreset.MISTRAL_EMBED_DIM_128),
+# the schema's `embedding_dimensions` for Vespa. Changing one without the other is what this test
+# should fail on, so it is stated here rather than imported from whichever backend is in use.
 EMBEDDING_DIM = 128
 
 COLLECTION_NAME = os.environ.get("COLLECTION_NAME", "exampledocs")
