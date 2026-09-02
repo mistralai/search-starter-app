@@ -3,16 +3,12 @@
 GENERATED_PROJECT := /tmp/search-starter-app-integration-test
 
 # Backend under test (vespa | postgres). Override on the command line, e.g.
-#   make integration-test BACKEND=postgres POSTGRES_PLUGIN_PATH=../dashboard/search/toolkit/plugins/postgres
+#   make integration-test BACKEND=postgres
 BACKEND ?= vespa
-
-# Local checkout of the (currently unpublished) postgres plugin. Required for
-# BACKEND=postgres so uv can resolve it via the generated [tool.uv.sources] shim.
-POSTGRES_PLUGIN_PATH ?=
 
 # Extra copier data passed to the postgres run.
 ifeq ($(BACKEND),postgres)
-COPIER_DATA := --data backend=postgres --data postgres_plugin_path=$(POSTGRES_PLUGIN_PATH)
+COPIER_DATA := --data backend=postgres
 else
 COPIER_DATA := --data backend=vespa
 endif
@@ -20,11 +16,9 @@ endif
 ## Generate a project from the template and run integration tests (default: vespa)
 integration-test: _integration-test-body
 
-## Generate + test the postgres variant. Requires POSTGRES_PLUGIN_PATH.
+## Generate + test the postgres variant.
 integration-test-postgres:
-	@test -n "$(POSTGRES_PLUGIN_PATH)" \
-		|| (echo "FAIL: set POSTGRES_PLUGIN_PATH to a local postgres plugin checkout" && exit 1)
-	$(MAKE) _integration-test-body BACKEND=postgres POSTGRES_PLUGIN_PATH=$(POSTGRES_PLUGIN_PATH)
+	$(MAKE) _integration-test-body BACKEND=postgres
 
 _integration-test-body:
 	@echo "=== integration-test (backend=$(BACKEND)) ==="

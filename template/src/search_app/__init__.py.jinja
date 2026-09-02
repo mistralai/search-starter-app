@@ -32,15 +32,21 @@ import os
 from sqlalchemy.engine import make_url
 
 from mistralai.search.toolkit.document import Document
+from mistralai.search.toolkit.embedding import MistralEmbeddingPreset, VectorDType
 from mistralai.search.toolkit.plugins.postgres import (
     PostgresApp,
     PostgresCollectionSchema,
     PostgresConnectionConfig,
 )
 
-# Embedding dimension must match the embedder used in the entrypoints.
-# MistralEmbedder defaults to the 128-dimension model.
-_EMBEDDING_DIM = 128
+# The embedding model must match the embedder used in the entrypoints (MistralEmbedder
+# defaults to mistral-embed-dim128-2510) and the column type the Alembic chain creates
+# (HALFVEC -> float16). A preset carries the dimensions and distance metric; building
+# it with FLOAT16 keeps the declared vector type in step with the migrated table, so
+# the store and the column agree at insert and query time.
+_EMBEDDING_MODEL = MistralEmbeddingPreset.MISTRAL_EMBED_DIM_128.build_embedding_model(
+    dtype=VectorDType.FLOAT16,
+)
 
 # Fixed at generation time rather than read from COLLECTION_NAME, because the Alembic
 # chain in alembic/versions/ builds a table of exactly this name. If the two could drift
@@ -55,8 +61,7 @@ COLLECTION_NAME = "{{ collection_name }}"
 POSTGRES_COLLECTION = PostgresCollectionSchema(
     collection_name=COLLECTION_NAME,
     document_type=Document,
-    dim=_EMBEDDING_DIM,
-    distance_metric="cosine",
+    embedding_model=_EMBEDDING_MODEL,
 )
 
 app = PostgresApp([POSTGRES_COLLECTION])

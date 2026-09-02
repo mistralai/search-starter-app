@@ -56,14 +56,3 @@ collection_name:
     {% elif backend == 'postgres' and collection_name | length > 34 %}
     Too long for Postgres: at most 34 characters, because index names derive from it.
     {% endif %}
-
-postgres_plugin_path:
-  type: str
-  default: ""
-  when: "{{ backend == 'postgres' }}"
-  help: >-
-    Path to a local checkout of mistralai-search-toolkit-plugins-postgres
-    (e.g. ../dashboard/search/toolkit/plugins/postgres). The toolkit core is
-    resolved from its sibling (<path>/../../core), because the plugin needs
-    unreleased core APIs not in the published wheel. Required until the plugin
-    and a matching core are published; leave empty once they are on the index.

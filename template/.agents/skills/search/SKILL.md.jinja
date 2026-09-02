@@ -273,6 +273,7 @@ CLI also supports `mistral-vespa bruno` and `mistral-vespa generate` (see `make 
 
 ```python
 from mistralai.search.toolkit.document import Document
+from mistralai.search.toolkit.embedding import MistralEmbeddingPreset, VectorDType
 from mistralai.search.toolkit.plugins.postgres import (
     PostgresApp,
     PostgresCollectionSchema,
@@ -284,8 +285,10 @@ app = PostgresApp(
         PostgresCollectionSchema(
             collection_name="exampledocs",
             document_type=Document,
-            dim=128,                     # match the embedder (MistralEmbedder → 128-dim)
-            distance_metric="cosine",
+            # Match the embedder (MistralEmbedder → 128-dim) and the migrated column (HALFVEC → float16).
+            embedding_model=MistralEmbeddingPreset.MISTRAL_EMBED_DIM_128.build_embedding_model(
+                dtype=VectorDType.FLOAT16,
+            ),
         )
     ]
 )
@@ -343,7 +346,7 @@ Subclasses: `VectorStoreIndex`, `KeywordStoreIndex`. Exceptions: `IndexingError`
 | Run this template end-to-end | `make setup-postgres` → `make ingest` → `make search` |
 | Apply schema changes | `make migrate` (or `make reset-postgres` to wipe first) |
 | Change the connection | `.env` `POSTGRES_DSN` + `docker-compose.yaml` |
-| Adjust the vector schema | `PostgresCollectionSchema` in `src/search_app/__init__.py` (dim, distance metric, HNSW params), then a new revision in `alembic/versions/` |
+| Adjust the vector schema | `PostgresCollectionSchema` in `src/search_app/__init__.py` (embedding model, distance metric, HNSW params), then a new revision in `alembic/versions/` |
 {%- endif %}
 | Index local files | `make ingest` or `Pipeline` + `FilesystemFileLoader` in `entrypoints/ingest.py` |
 | Index from S3/GCS/Azure | storage plugin loader + same `Pipeline` |

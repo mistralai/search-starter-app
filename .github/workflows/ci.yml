@@ -8,6 +8,10 @@ on:
 jobs:
   integration-test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [vespa, postgres]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
@@ -19,4 +23,4 @@ jobs:
         run: uv tool install copier
 
       - name: Run integration tests
-        run: make integration-test
+        run: make integration-test BACKEND=${{ matrix.backend }}
