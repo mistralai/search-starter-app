@@ -15,18 +15,14 @@ dependencies = [
     # the older core does not have. Bump both by bumping this.
     "mistralai-search-toolkit[text-splitter-langchain,vespa]==0.0.13",
 {%- else %}
-    # No version pin on the postgres branch: the plugin depends on unreleased
-    # core APIs (e.g. ChunkPatch) that are absent from the published ==0.0.10
-    # core wheel, so core is sourced from the local monorepo checkout via
-    # [tool.uv.sources] below. Pinning ==0.0.10 here would conflict with that
-    # local (post/dev-versioned) core and make the resolver unsatisfiable.
-    "mistralai-search-toolkit[text-splitter-langchain]",
-    # The postgres backend ships as a separate plugin wheel. Depend on it
-    # DIRECTLY rather than via a `[postgres]` extra: that extra is not on the
-    # published core package yet, and a `[tool.uv.sources]` override (below) only
-    # redirects a package that is already a declared dependency. Until the plugin
-    # is published this resolves from the local checkout in [tool.uv.sources].
-    "mistralai-search-toolkit-plugins-postgres",
+    # Pinned exactly, and core and the postgres plugin are released in lockstep on the same
+    # version number. The plugin's own dependency on core carries no lower bound, so a core
+    # pin left behind a plugin release resolves to a pair that imports names the older core
+    # does not have. Bump both by bumping these.
+    "mistralai-search-toolkit[text-splitter-langchain]==0.0.13",
+    # The postgres backend ships as a separate plugin wheel. Depend on it DIRECTLY rather
+    # than via a `[postgres]` extra, which is not on the published core package.
+    "mistralai-search-toolkit-plugins-postgres==0.0.13",
     # The collection's table is created by the Alembic chain in alembic/, not by a
     # create-if-absent call, so that one ordering governs the whole database once this
     # project grows tables of its own. `make migrate` runs it.
@@ -62,20 +58,7 @@ mistralai = false
 "mistral-common" = false
 "mistralai-search-toolkit" = false
 "mistralai-search-toolkit-plugins-{{ 'vespa' if backend == 'vespa' else 'postgres' }}" = false
-{% if backend == 'postgres' and postgres_plugin_path -%}
 
-# Neither the postgres plugin nor a matching core are published yet, and the
-# plugin depends on unreleased core APIs (e.g. ChunkPatch). So resolve BOTH the
-# plugin AND core from the local monorepo checkout. core lives next to the
-# plugin (search/toolkit/core alongside search/toolkit/plugins/postgres), so it
-# is derived as a sibling of postgres_plugin_path. The plugin's own pyproject
-# pins core via `workspace = true`; pointing the root at that same checkout keeps
-# the two in agreement. Remove this whole block once the plugin and a matching
-# core are published to the index.
-[tool.uv.sources]
-mistralai-search-toolkit = {{ '{' }} path = "{{ postgres_plugin_path }}/../../core", editable = true {{ '}' }}
-mistralai-search-toolkit-plugins-postgres = {{ '{' }} path = "{{ postgres_plugin_path }}", editable = true {{ '}' }}
-{% endif %}
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
