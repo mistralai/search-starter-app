@@ -1,0 +1,115 @@
+"""Create the {{ collection_name }} search collection.
+
+The table the collection declaration in `search_app` describes, as of the day this project was
+generated.
+
+Everything below is literal -- no call back into the search toolkit decides any of it. That
+matters: a helper that built the table from the toolkit at migration time would change what
+this revision does whenever the toolkit was upgraded, and a revision has to describe a fixed
+historical shape.
+
+pgvector is assumed to be installed already. The local dev container ships with it; on managed
+Postgres `CREATE EXTENSION` needs privileges an application role is not expected to hold, so it
+belongs to whoever provisions the database.
+
+Changing the schema means editing the declaration in `src/search_app/__init__.py` and adding a
+revision that brings the database to match. This one stays as it is.
+"""
+
+from collections.abc import Sequence
+
+import pgvector.sqlalchemy  # noqa: F401 - renders vector column types in generated revisions
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+from alembic import op
+
+revision: str = "0001"
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
+
+def upgrade() -> None:
+    op.create_table(
+        "{{ collection_name }}_chunks",
+        sa.Column("id", sa.Text(), nullable=False),
+        sa.Column("document_id", sa.Text(), nullable=False),
+        sa.Column("source_id", sa.Text(), nullable=False),
+        sa.Column("locator", sa.Text(), nullable=False),
+        sa.Column("parent_ref", sa.Text(), nullable=True),
+        sa.Column("chunk_type", sa.Text(), nullable=False),
+        sa.Column("start_offset", sa.Integer(), nullable=False),
+        sa.Column("end_offset", sa.Integer(), nullable=False),
+        sa.Column("content", sa.Text(), nullable=False),
+        sa.Column(
+            "metadata",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column("embedding", pgvector.sqlalchemy.halfvec.HALFVEC(dim=128), nullable=False),
+        sa.CheckConstraint("length(chunk_type) <= 64", name="{{ collection_name }}_chunks_chunk_type_len"),
+        sa.CheckConstraint("length(content) <= 100000", name="{{ collection_name }}_chunks_content_len"),
+        sa.CheckConstraint("length(document_id) <= 255", name="{{ collection_name }}_chunks_document_id_len"),
+        sa.CheckConstraint("length(id) <= 255", name="{{ collection_name }}_chunks_id_len"),
+        sa.CheckConstraint("length(locator) <= 512", name="{{ collection_name }}_chunks_locator_len"),
+        sa.CheckConstraint("length(parent_ref) <= 255", name="{{ collection_name }}_chunks_parent_ref_len"),
+        sa.CheckConstraint("length(source_id) <= 1024", name="{{ collection_name }}_chunks_source_id_len"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        "{{ collection_name }}_chunks_document_id_idx",
+        "{{ collection_name }}_chunks",
+        ["document_id"],
+        unique=False,
+    )
+    op.create_index(
+        "{{ collection_name }}_chunks_hnsw_m16_efc64_hv_cos",
+        "{{ collection_name }}_chunks",
+        ["embedding"],
+        unique=False,
+        postgresql_using="hnsw",
+        postgresql_with={"m": 16, "ef_construction": 64},
+        postgresql_ops={"embedding": "halfvec_cosine_ops"},
+    )
+    op.create_index(
+        "{{ collection_name }}_chunks_metadata_gin",
+        "{{ collection_name }}_chunks",
+        ["metadata"],
+        unique=False,
+        postgresql_using="gin",
+        postgresql_ops={"metadata": "jsonb_path_ops"},
+    )
+    op.create_index(
+        "{{ collection_name }}_chunks_positional_idx",
+        "{{ collection_name }}_chunks",
+        ["source_id", "chunk_type", "start_offset"],
+        unique=False,
+    )
+    op.create_index(
+        "{{ collection_name }}_chunks_source_locator_key",
+        "{{ collection_name }}_chunks",
+        ["source_id", "locator"],
+        unique=True,
+    )
+
+
+def downgrade() -> None:
+    op.drop_index("{{ collection_name }}_chunks_source_locator_key", table_name="{{ collection_name }}_chunks")
+    op.drop_index("{{ collection_name }}_chunks_positional_idx", table_name="{{ collection_name }}_chunks")
+    op.drop_index(
+        "{{ collection_name }}_chunks_metadata_gin",
+        table_name="{{ collection_name }}_chunks",
+        postgresql_using="gin",
+        postgresql_ops={"metadata": "jsonb_path_ops"},
+    )
+    op.drop_index(
+        "{{ collection_name }}_chunks_hnsw_m16_efc64_hv_cos",
+        table_name="{{ collection_name }}_chunks",
+        postgresql_using="hnsw",
+        postgresql_with={"m": 16, "ef_construction": 64},
+        postgresql_ops={"embedding": "halfvec_cosine_ops"},
+    )
+    op.drop_index("{{ collection_name }}_chunks_document_id_idx", table_name="{{ collection_name }}_chunks")
+    op.drop_table("{{ collection_name }}_chunks")

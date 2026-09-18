@@ -1,0 +1,101 @@
+# Workflow Examples
+
+This folder integrates the search-starter-app with [Mistral Workflows](https://docs.mistral.ai/capabilities/workflows/) via the [`mistralai-workflows-plugins-search`](https://pypi.org/project/mistralai-workflows-plugins-search/) plugin, which provides durable ingestion pipelines as reusable workflow definitions.
+
+The plugin ships two workflows and the activities backing them:
+
+| Workflow | Name | Description |
+| --- | --- | --- |
+| `IngestDocumentsWorkflow` | `search-ingest-documents` | Route documents by type, batch them, and fan out as child workflows |
+| `IngestBatchWorkflow` | `search-ingest-batch` | Extract, split, process, embed and index one homogeneous batch |
+
+This module's job is to build the Search Toolkit pipelines, register them (and a `RoutedPipeline`) on the plugin's `pipeline_registry` at worker startup, and trigger the workflow from the command line.
+
+## Prerequisites
+
+> Run these commands from your **generated project root** (the folder created by `copier copy`), not from the `search-starter-app` template repo itself.
+
+```bash
+make installdeps
+make setup-{% if backend == 'vespa' %}vespa{% else %}postgres{% endif %}
+```
+
+Ensure these are set in your `.env` file:
+
+- `MISTRAL_API_KEY`
+- `DEPLOYMENT_NAME` — a stable identifier for this worker (set during `copier copy`, editable in `.env`)
+
+## How it works
+
+```
+worker.py
+├── _build_pipelines()        # Plain-text + OCR pipelines from Search Toolkit
+├── _register_pipelines()     # Register on plugin's pipeline_registry + a RoutedPipeline
+└── run_worker()              # Start the Temporal worker with plugin workflows
+
+start.py
+├── --file-path               # Local file or directory to ingest
+├── _collect_refs()           # Walks path → list[DocumentRef]
+└── execute_workflow_and_wait # Calls search-ingest-documents via Mistral API
+```
+
+The worker builds the same `Pipeline` instances that `entrypoints/ingest.py` uses (same loader, splitter, embedder, store), registers them under names on the plugin's `pipeline_registry`, and wraps them in a `RoutedPipeline` so the plugin's `plan_batches` activity can route each file to the correct pipeline by mimetype.
+
+## How to run
+
+> **Important:** execution commands call the Mistral Workflows API. The workflow must be registered first by a running worker. If you see `Workflow not found`, start the worker below and retry.
+
+**Terminal 1 — start the examples worker (leave this running):**
+
+```bash
+make start-examples
+```
+
+Wait until the worker is listening for execution requests.
+
+**Terminal 2 — trigger the workflow:**
+
+```bash
+make execute-ingestion
+make execute-ingestion file_path=sample_data/hello.txt
+make execute-ingestion file_path=sample_data
+```
+
+You can also trigger the workflow from the [Mistral Console](https://console.mistral.ai/build/workflows): select `search-ingest-documents`, click **Start Workflow**, and provide the input JSON.
+
+After ingestion, search directly (no workflow):
+
+```bash
+make search query="hello world"
+```
+
+## Folder layout
+
+```text
+examples/workflows/
+├── README.md              # This file
+├── worker.py              # Registers pipelines + router, runs the worker
+└── start.py               # CLI to trigger search-ingest-documents
+```
+
+## Design principles
+
+- **Plugin owns the workflows** — the workflow definitions, activities, and models all come from `mistralai-workflows-plugins-search`. This module only wires up the deployment-specific pipelines.
+- **Workflows for ingestion** — document ingestion is long-running and benefits from durability, retries, and observability in the Mistral Console.
+- **Search stays direct** — search queries use `make search` / `entrypoints/search.py` for low latency. Workflows are not needed for queries.
+- **Small activity I/O** — the plugin's workflows pass `DocumentRef` objects (paths only) between activities, never file bytes. Documents move between stages as offloaded payloads.
+
+## Troubleshooting
+
+| Issue | Fix |
+| --- | --- |
+| `Workflow not found` | Start `make start-examples` in a separate terminal, then retry |
+| `DEPLOYMENT_NAME is required` | Add `DEPLOYMENT_NAME=<your-project>` to `.env` |
+| `No pipeline registered` | Ensure `COLLECTION_NAME` in `.env` matches a collection the backend knows |
+| {% if backend == 'vespa' %}Vespa errors during indexing | Run `make setup-vespa` before triggering ingestion{% else %}Postgres errors during indexing | Run `make setup-postgres` before triggering ingestion{% endif %} |
+
+Enable verbose logging:
+
+```bash
+LOG_LEVEL=DEBUG make start-examples
+```
