@@ -13,16 +13,13 @@ dependencies = [
     # number. The `vespa` extra pulls the plugin, whose own dependency on core carries no lower
     # bound -- so a core pin left behind a plugin release resolves to a pair that imports names
     # the older core does not have. Bump both by bumping this.
-    "mistralai-search-toolkit[text-splitter-langchain,vespa]==0.0.13",
+    "mistralai-search-toolkit[text-splitter-langchain,vespa]==0.0.14",
 {%- else %}
     # Pinned exactly, and core and the postgres plugin are released in lockstep on the same
-    # version number. The plugin's own dependency on core carries no lower bound, so a core
-    # pin left behind a plugin release resolves to a pair that imports names the older core
-    # does not have. Bump both by bumping these.
-    "mistralai-search-toolkit[text-splitter-langchain]==0.0.13",
-    # The postgres backend ships as a separate plugin wheel. Depend on it DIRECTLY rather
-    # than via a `[postgres]` extra, which is not on the published core package.
-    "mistralai-search-toolkit-plugins-postgres==0.0.13",
+    # version number. The `postgres` extra pulls the plugin, whose own dependency on core
+    # carries no lower bound -- so a core pin left behind a plugin release resolves to a
+    # pair that imports names the older core does not have. Bump both by bumping this.
+    "mistralai-search-toolkit[text-splitter-langchain,postgres]==0.0.14",
     # The collection's table is created by the Alembic chain in alembic/, not by a
     # create-if-absent call, so that one ordering governs the whole database once this
     # project grows tables of its own. `make migrate` runs it.
@@ -33,7 +30,7 @@ dependencies = [
     "python-dotenv>=0.9.9",
     # Workflows integration (examples/workflows/) — the search plugin provides
     # durable ingestion workflows; the workflows SDK ships the worker runtime.
-    "mistralai-workflows-plugins-search>=0.1.0,<1",
+    "mistralai-workflows-plugins-search>=0.2.0,<1",
     "mistralai-workflows[mistralai]>=3.0.0,<4",
     "pydantic",
 ]
