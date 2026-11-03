@@ -135,6 +135,21 @@ async def search(
                      seen earlier in an agentic loop, so each search surfaces
                      fresh context instead of repeating hits.
     """
+{%- if backend == 'vespa' %}
+    # The Vespa query-profile path rejects exclude_ids, so the exclusion is
+    # applied here: over-fetch so the dropped chunks don't consume top_k slots.
+    result = await _query_engine.search(
+        query=query,
+        top_k=top_k + len(exclude_ids or []),
+        include_metadata=True,
+        include_content=True,
+    )
+    chunks = _format_chunks(result.results)
+    if exclude_ids:
+        banned = set(exclude_ids)
+        chunks = [chunk for chunk in chunks if chunk["id"] not in banned]
+    return chunks[:top_k]
+{%- else %}
     result = await _query_engine.search(
         query=query,
         top_k=top_k,
@@ -143,6 +158,7 @@ async def search(
         exclude_ids=set(exclude_ids) if exclude_ids else None,
     )
     return _format_chunks(result.results)
+{%- endif %}
 
 
 def _pipeline_for_name(name: str) -> Pipeline:

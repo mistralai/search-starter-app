@@ -108,6 +108,30 @@ def test_search_exposes_exclude_ids(mcp_server) -> None:
     assert search_tool.parameters.get("required") == ["query"]
 
 
+{% if backend == 'vespa' %}
+def test_search_filters_excluded_ids_and_overfetches(mcp_server, monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _RecordingEngine()
+    monkeypatch.setattr(mcp_server, "_query_engine", engine)
+
+    hits = asyncio.run(_search_fn(mcp_server)("q", exclude_ids=["c1"]))
+
+    # The exclusion is applied post-search: the engine over-fetches to cover the
+    # slots the dropped chunks would consume, and the excluded id never returns.
+    assert engine.calls[0]["top_k"] == 6
+    assert "exclude_ids" not in engine.calls[0]
+    assert [chunk["id"] for chunk in hits] == []
+
+
+def test_search_without_exclude_ids_fetches_exactly_top_k(mcp_server, monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _RecordingEngine()
+    monkeypatch.setattr(mcp_server, "_query_engine", engine)
+
+    hits = asyncio.run(_search_fn(mcp_server)("q"))
+
+    assert engine.calls[0]["top_k"] == 5
+    assert "exclude_ids" not in engine.calls[0]
+    assert [chunk["id"] for chunk in hits] == ["c1"]
+{% else %}
 def test_search_forwards_exclude_ids_as_a_set(mcp_server, monkeypatch: pytest.MonkeyPatch) -> None:
     engine = _RecordingEngine()
     monkeypatch.setattr(mcp_server, "_query_engine", engine)
@@ -125,6 +149,7 @@ def test_search_defaults_exclude_ids_to_none(mcp_server, monkeypatch: pytest.Mon
 
     # Empty/absent stays None so the backend skips the filter entirely.
     assert engine.calls[0]["exclude_ids"] is None
+{%- endif %}
 
 
 def test_open_takes_a_chunk_id_and_read_stays_offset_addressed(mcp_server) -> None:
