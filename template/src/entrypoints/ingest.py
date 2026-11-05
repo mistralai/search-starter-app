@@ -11,7 +11,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from mistralai.client import Mistral
-from mistralai.search.toolkit.embedders import MistralEmbedder
+from mistralai.search.toolkit.embedding import MistralEmbedder
 from mistralai.search.toolkit.ingestion.extractors import (
     MistralOCRExtractor,
     PlainTextExtractor,
